@@ -105,3 +105,32 @@ If enabled, the recorder may flag these as “would be blocked under strict poli
 ## Notes
 - This mapping is intentionally conservative.
 - The default mode of this repo is **observability-only**.
+
+## 仓库评估（可复现）
+
+openclaw-flight-recorder-verified 是一个本地可观测性 PoC：输入 RFC-001 JSONL 事件日志，输出行为摘要 `badge.json` 与 hash 链收据 `receipts.jsonl`；并提供 tests + CI 作为一致性验收红线（防漂移）。
+
+### 复现步骤（本地）
+（命令以 README 的 Quickstart 为准）
+
+1) 生成 clean 报告  
+- `python src/recorder.py --input examples/clean_run.jsonl --out out_clean`
+
+2) 生成 risky 报告（含 policy sim）  
+- `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim`
+
+3) 运行一致性验收（Conformance Suite）  
+- `python -m unittest discover -s tests -p "test_*.py" -v`
+
+### 验收标准（必须满足）
+- Clean Run：`status == "OBSERVED"` 且 `highlight_count == 0` 且 `evidence_gaps == 0`
+- Risky Run：`status == "ATTENTION"` 且 `highlight_count == 7` 且 `evidence_gaps == 0`
+- Risky Run（policy-sim）：`would_block == true` 且 `violation_count == 7`
+
+### Receipts 链一致性（必须满足）
+- 第一条 `prev_hash` 为 64 个 “0”
+- 对任意 i>1：`prev_hash[i] == receipt_hash[i-1]`（链连续）
+
+### 边界说明
+- receipts 的 hash 链用于“事后可检测的完整性”（detect tampering），不是签名系统；如需抵抗“从头重算伪造链”，需要外部签名/时间戳/透明日志（可作为后续增强方向）。
+
