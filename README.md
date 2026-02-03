@@ -1,121 +1,82 @@
 # OpenClaw Flight Recorder (Research Preview)
 
-“AI Agent 的黑盒记录器（离线版）”：把 Agent 的事件流（JSONL）压缩成 **可读的行为摘要**（badge.json）与 **可验证的收据链**（receipts.jsonl），并提供 **CI 一致性验收**（tests + GitHub Actions），确保不漂移。
+本项目是一个本地可观测性 PoC：输入 RFC-001 JSONL 事件日志，输出 **行为摘要**（badge.json）与 **可验证收据链**（receipts.jsonl），并提供 **CI 一致性验收**（tests + GitHub Actions）来防漂移。
 
-> 这不是系统级“抓包器/拦截器”。它是一个 **本地、可选接入（opt-in）的离线分析器**：输入事件日志 → 输出摘要 + 收据链。
+> 定位：诊断工具（dashcam/black box），不是阻断防火墙。  
+> `--policy-sim` 只是 advisory（建议性）信号，用于研究/对齐更高层治理系统。
 
 ---
 
 ## Quickstart
 
-本地运行（生成报告）：
+生成报告（保持主线兼容）：
 - `python src/recorder.py --input examples/clean_run.jsonl --out out_clean`
 - `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim`
 
-本地验收（Conformance Suite）：
+运行一致性验收（Conformance Suite）：
 - `python -m unittest discover -s tests -p "test_*.py" -v`
 
 CI：
-- GitHub Actions 会在每次 push / PR 自动跑一致性验收（Conformance Tests）。
+- GitHub Actions 会在每次 push / PR 自动跑 Conformance Suite。
+
+---
+
+## 新增能力（v1.1）
+
+1) **扩展事件类型**：DATABASE_OP / API_CALL / MEMORY_ACCESS（见 examples/ext_run.jsonl）  
+2) **证据缺口显式化**：缺 MUST 字段 / 缺关键 details / data_complete=false 会产生 EVIDENCE_GAP  
+3) **未知事件类型显式化**：UNKNOWN_EVENT_TYPE（不会静默忽略）  
+4) **可配置 policy-sim**：`--config policy.json` + `--profile advisory|strict_advisory`（见 RFC/002）  
+5) **收据链验链器**：`--verify-receipts out_dir/receipts.jsonl`  
+6) **可选锚定文件**：`--anchor-out anchor.json`（可用环境变量 FLIGHT_ANCHOR_KEY 生成 HMAC）  
+7) **可选 HTML 报告**：`--html` 生成 `report.html`
 
 ---
 
 ## Windows PowerShell（傻瓜化示例）
 
-运行 clean 示例并查看结果：
 - `python src/recorder.py --input examples/clean_run.jsonl --out out_clean`
 - `dir out_clean`
 - `notepad out_clean\badge.json`
 - `notepad out_clean\receipts.jsonl`
 
-运行 risky 示例（含 policy-sim）并查看结果：
+验链：
+- `python src/recorder.py --verify-receipts out_clean\receipts.jsonl`
+
+生成 HTML：
+- `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim --html`
+
+---
+
+## Policy Simulation（advisory）
+
 - `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim`
-- `notepad out_sim\badge.json`
+- 可选：`--config policy.json --profile strict_advisory`
+
+配置格式见：`RFC/002-advisory-policy.md`
 
 ---
 
-## 你会得到什么输出？
+## RFC / Contract
 
-运行后，输出目录（例如 `out_clean/`）至少包含：
-
-- `badge.json`  
-  行为摘要 + 风险提示（例如 OBSERVED / ATTENTION），以及（可选）policy simulation 结果。
-
-- `receipts.jsonl`  
-  每个事件一条“收据”，包含链式字段：`prev_hash → receipt_hash`，用于证明“日志没有被悄悄改过/删过”。
+- `RFC/001-flight-log.md`：事件 JSONL 合同（MUST 字段 + details 结构 + 扩展事件）
+- `RFC/002-advisory-policy.md`：policy-sim 输出字段与 policy.json 结构
 
 ---
 
-## 核心概念
+## Outputs
 
-### 1) Event log（输入：JSONL）
-每一行是一个事件 JSON（JSONL = 每行一个 JSON）。事件格式与字段约束见：
-- `RFC/001-flight-log.md`
-
-### 2) Badge（输出：摘要）
-`badge.json` 会汇总：
-- 观测到的行为类别（network out / file write / proc exec / dep install）
-- 风险标签（risk_highlights）
-- 统计信息（total_events / highlight_count / evidence_gaps）
-- 可选：policy simulation（当你加 `--policy-sim`）
-
-### 3) Receipts（输出：可验证链）
-`receipts.jsonl` 每行包含（至少）：
-- `trace_id`：同一次运行的追踪 ID
-- `seq`：事件序号（递增）
-- `event_type`：事件类型（例如 FILE_IO / NET_IO / PROC_EXEC / DEP_INSTALL）
-- `event_hash`：事件内容摘要哈希
-- `prev_hash`：前一条收据哈希
-- `receipt_hash`：当前收据哈希（链上的“当前锚点”）
-
-链连续性要求：  
-后一条的 `prev_hash` 必须等于前一条的 `receipt_hash`。
+输出目录（--out 指定）至少包含：
+- `badge.json`：行为摘要 + 风险高亮 + stats + （可选）policy_simulation
+- `receipts.jsonl`：hash 链收据（prev_hash → receipt_hash）
+可选：
+- `report.html`：简易可视化
+- `anchor.json`：锚定文件（final_receipt_hash + 可选 HMAC）
 
 ---
-
-## Policy Simulation（可选：建议性策略模拟）
-
-运行：
-- `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim`
-
-这会在 `badge.json` 增加：
-- `policy_simulation.would_block`（true/false）
-- `violation_count`
-- `violations`（可读原因列表）
-
-注意：这是 **advisory（建议性）**，不是强制拦截器。它用于把风险标签压成可判决信号，便于接入更上层的治理/门控系统。
-
----
-
-## Conformance Suite（一致性验收用例库）
-
-本仓库内置两条“红线用例”：
-- `examples/clean_run.jsonl`：应当输出 `status=OBSERVED` 且 `highlight_count=0`
-- `examples/risky_run.jsonl`：应当输出 `status=ATTENTION` 且高风险标签完整（并在 policy-sim 下 `would_block=true`）
-
-测试脚本：
-- `tests/test_examples.py`
-
-运行：
-- `python -m unittest discover -s tests -p "test_*.py" -v`
-
-CI：
-- `.github/workflows/ci.yml`
-
-目标：让“定律/合同（RFC）→ 一致性骨架（receipt chain）→ 自动验收（tests+CI）”成为不可漂移的工程现实。
-
----
-
-## Repository Structure
 
 openclaw-flight-recorder-verified/
 ├── README.md
-├── LICENSE
-├── .gitignore
-├── requirements.txt
-├── SECURITY.md
-├── PRIVACY.md
-├── VERIFY.md
 ├── RFC/
 │ ├── 001-flight-log.md
 │ └── 002-advisory-policy.md
@@ -123,39 +84,11 @@ openclaw-flight-recorder-verified/
 │ └── recorder.py
 ├── examples/
 │ ├── clean_run.jsonl
-│ └── risky_run.jsonl
-├── tests/
-│ └── test_examples.py
-└── .github/
-└── workflows/
-└── ci.yml
+│ ├── risky_run.jsonl
+│ └── ext_run.jsonl
+└── tests/
+└── test_examples.py
 
----
 
-## Requirements
+## Repository Structure
 
-- Python 3.10+（本项目默认零依赖；见 `requirements.txt`）
-
----
-
-## Security & Privacy
-
-- 安全建议、披露方式见 `SECURITY.md`
-- 隐私/数据处理原则见 `PRIVACY.md`
-
-提示：示例日志中的域名、路径等多为演示用途（synthetic），不代表你的真实系统文件被修改。
-
----
-
-## Roadmap（建议方向）
-
-- Collector / Exporter：将真实 agent side-effects 自动采集为 RFC-001 JSONL
-- 更细粒度的声明/许可模型（declared intent / allowlist / sandbox）
-- 更强的可验证性：将 receipt 链与外部签名/时间戳/证明系统对接
-- 更完整的 policy profiles：在 advisory 基础上扩展不同环境策略
-
----
-
-## License
-
-See `LICENSE`.
