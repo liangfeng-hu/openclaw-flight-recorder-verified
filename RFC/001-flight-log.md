@@ -4,9 +4,9 @@
 Proposal / Research Preview
 
 ## Abstract
-Defines a minimal, tool-agnostic **JSONL** format for exporting agent execution events.
+Defines a minimal, tool-agnostic JSONL format for exporting agent execution events.
 
-Goal: **Observability** — enable users to see and audit side effects (Network / File / Exec / Supply Chain / Tool) without relying on opaque reputation systems.
+Goal: Observability — enabling users to see side effects (Network / File / Exec / Supply Chain) with replayable, verifiable traces.
 
 ## Format
 - UTF-8 JSON Lines (one JSON object per line)
@@ -14,24 +14,22 @@ Goal: **Observability** — enable users to see and audit side effects (Network 
 
 ## Required Fields (MUST)
 Each event MUST contain:
-
 - `v` (string): version, e.g. `"flight-log/1"`
-- `ts` (string): ISO-8601 timestamp (UTC recommended)
-- `trace_id` (string): unique ID for the run/flow
+- `ts` (string): ISO-8601 timestamp
+- `trace_id` (string): run/flow ID
 - `seq` (integer): monotonically increasing sequence number
 - `actor` (string): agent/skill identifier
-- `event_type` (string): one of Event Types below (unknown types are allowed but should be surfaced)
+- `event_type` (string): see Event Types below
 - `payload_digest` (string): digest of redacted payload (e.g., `sha256:...`)
-- `domain_class` (string): coarse label (`NET`, `FILE`, `EXEC`, `SUPPLY`, `TOOL`, `ID`, ...)
+- `domain_class` (string): coarse label (`NET`, `FILE`, `EXEC`, `SUPPLY`, ...)
 
 ## Optional Fields (SHOULD when available)
 - `declared` (boolean): whether this side effect was explicitly declared/expected
 - `details` (object): redacted metadata (host, path, op, cmd_digest, package, version, etc.)
-- `data_complete` (boolean): whether the exporter captured enough data (for evidence gap detection)
+- `data_complete` (boolean): whether event data is fully captured (for evidence gap detection)
 
 ## Event Types
-
-Core types:
+Core:
 - `ID_ROUTE`
 - `TOOL_CALL`
 - `FILE_IO`
@@ -42,46 +40,43 @@ Core types:
 - `MESSAGE_IN`
 - `MESSAGE_OUT`
 
-Extension types (optional, backward compatible):
+Extensions (optional, backward compatible):
 - `DATABASE_OP`
 - `API_CALL`
 - `MEMORY_ACCESS`
 
-Synthetic (internal to analyzers):
-- `EVIDENCE_GAP`
-
 ## details schema (recommended)
 
 ### NET_IO
-- `host` (string)
-- `port` (int/string)
-- `direction` (string): `IN` or `OUT`
+- `direction`: `IN` or `OUT`
+- `host`
+- `port`
 
 ### FILE_IO
-- `path` (string)
-- `op` (string): `read`/`write`/`delete`
+- `op`: `read` / `write` / `delete`
+- `path`
 
 ### PROC_EXEC
-- `cmd_digest` (string): sha256 hex digest of redacted command
-- `cmd` (string, optional): only if safe/redacted (not recommended)
+- `cmd_digest` (preferred)
+- `cmd` (optional, redacted)
 
 ### DEP_INSTALL
-- `package` (string)
-- `version` (string) e.g. `latest`, `1.2.3`
+- `package`
+- `version` (e.g., `latest`, `1.2.3`)
 
-### DATABASE_OP (extension)
-- `db_type` (string) e.g. `mysql`, `sqlite`
-- `query` (string, redacted if needed)
+### DATABASE_OP
+- `db_type`
+- `query` (redacted if needed)
 
-### API_CALL (extension)
-- `endpoint` (string)
-- `headers` (object, redacted) — do NOT include secrets in real logs
+### API_CALL
+- `endpoint`
+- `headers` (redacted; do NOT include secrets)
 
-### MEMORY_ACCESS (extension)
-- `size` (number): bytes
+### MEMORY_ACCESS
+- `size` (bytes)
 
 ## Privacy Guidance
 Exporters SHOULD:
 - store digests rather than raw prompts/keys/messages
-- redact file contents, secrets, headers, tokens
-- prefer `cmd_digest` over raw `cmd`
+- redact secrets, tokens, sensitive file contents
+- prefer digests over raw values where possible
