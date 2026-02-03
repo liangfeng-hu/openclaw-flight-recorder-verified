@@ -398,4 +398,144 @@ def simulate_policy(highlights: List[Dict[str, Any]], rules: Dict[str, bool], pr
                 violations.append(f"Seq {seq}: Undeclared execution")
             elif tag == "SENSITIVE_PATH":
                 violations.append(f"Seq {seq}: Sensitive file mutation {h.get('path','')}".strip())
-            elif tag == "UNDECLARED_FILE_MUTA
+            elif tag == "UNDECLARED_FILE_MUTATION":
+                violations.append(f"Seq {seq}: Undeclared file mutation {h.get('path','')}".strip())
+            elif tag == "UNDECLARED_EGRESS":
+                violations.append(f"Seq {seq}: Undeclared egress")
+            elif tag == "SQL_RISK":
+                violations.append(f"Seq {seq}: High-risk database operation")
+            elif tag == "API_CREDENTIAL_EXPOSURE":
+                violations.append(f"Seq {seq}: Potential API credential exposure")
+            elif tag == "HIGH_MEMORY_ACCESS":
+                violations.append(f"Seq {seq}: High memory access")
+            else:
+                violations.append(f"Seq {seq}: {tag}")
+
+    return {"enabled": True, "profile": profile_name, "would_block": bool(would_block), "violation_count": len(violations), "violations": violations}
+
+
+def write_json(path: str, obj: Any) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+
+def write_jsonl(path: str, rows: List[Dict[str, Any]]) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+def verify_receipts_file(path: str) -> Tuple[bool, str]:
+    if not os.path.exists(path):
+        return False, f"missing receipts file: {path}"
+    rows: List[Dict[str, Any]] = []
+    with _safe_open_text(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                return False, "invalid JSONL in receipts"
+    if not rows:
+        return False, "receipts empty"
+
+    for i, r in enumerate(rows):
+        for k in ("trace_id", "seq", "event_type", "event_hash", "prev_hash", "receipt_hash"):
+            if k not in r:
+                return False, f"missing key '{k}' at line {i+1}"
+        if not _is_hex64(r["event_hash"]): return False, f"bad event_hash at seq={r.get('seq')}"
+        if not _is_hex64(r["prev_hash"]): return False, f"bad prev_hash at seq={r.get('seq')}"
+        if not _is_hex64(r["receipt_hash"]): return False, f"bad receipt_hash at seq={r.get('seq')}"
+
+        core = {"trace_id": r["trace_id"], "seq": r["seq"], "event_type": r["event_type"], "event_hash": r["event_hash"], "prev_hash": r["prev_hash"]}
+        expect = _sha256_hex_str(_canon_json(core))
+        if r["receipt_hash"] != expect:
+            return False, f"receipt_hash mismatch at seq={r.get('seq')}"
+
+    for i in range(1, len(rows)):
+        if rows[i]["prev_hash"] != rows[i-1]["receipt_hash"]:
+            return False, f"chain broken at seq={rows[i].get('seq')}"
+
+    return True, "OK"
+
+
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="OpenClaw Flight Recorder (offline analyzer)")
+    p.add_argument("--input", help="JSONL flight log input")
+    p.add_argument("--out", help="Output directory")
+    p.add_argument("--overwrite", action="store_true", help="Allow writing into a non-empty output directory")
+    p.add_argument("--policy-sim", action="store_true", help="Enable advisory policy simulation output")
+    p.add_argument("--config", default=None, help="Optional policy.json config (see RFC/002)")
+    p.add_argument("--profile", default=None, help="Policy profile name (advisory / strict_advisory)")
+    p.add_argument("--declared-intents", default="", help="Comma-separated event_types considered declared (fallback only)")
+    p.add_argument("--verify-receipts", default=None, help="Verify a receipts.jsonl file and exit")
+    return p.parse_args(argv)
+
+
+def ensure_out_dir(out_dir: str, overwrite: bool) -> None:
+    if os.path.exists(out_dir):
+        if os.listdir(out_dir) and not overwrite:
+            raise SystemExit(f"Output dir not empty: {out_dir}. Use a new dir or pass --overwrite.")
+    else:
+        os.makedirs(out_dir, exist_ok=True)
+
+
+def read_jsonl_events(path: str) -> List[Dict[str, Any]]:
+    events: List[Dict[str, Any]] = []
+    with _safe_open_text(path) as f:
+        for lineno, line in enumerate(f, 1):
+            s = line.strip()
+            if not s:
+                continue
+            try:
+                obj = json.loads(s)
+                if not isinstance(obj, dict):
+                    raise ValueError("non-object json")
+                events.append(obj)
+            except Exception:
+                payload = f"parse_error_line_{lineno}"
+                ev = {
+                    "v": RFC_VERSION,
+                    "ts": _iso_now_utc(),
+                    "trace_id": "unknown-trace",
+                    "seq": lineno,
+                    "actor": "unknown",
+                    "event_type": "EVIDENCE_GAP",
+                    "payload_digest": "sha256:" + _sha256_hex_str(payload),
+                    "domain_class": "META",
+                    "declared": False,
+                    "data_complete": False,
+                    "details": {"reason": "json_parse_error", "lineno": lineno},
+                }
+                events.append(ev)
+    return events
+
+
+def main(argv: List[str]) -> int:
+    args = parse_args(argv)
+
+    if args.verify_receipts:
+        ok, msg = verify_receipts_file(args.verify_receipts)
+        print(msg)
+        return 0 if ok else 2
+
+    if not args.input or not args.out:
+        print("Error: --input and --out are required (unless --verify-receipts is used).", file=sys.stderr)
+        return 2
+
+    policy_cfg = load_policy_config(args.config)
+    declared_intents = [x.strip() for x in args.declared_intents.split(",") if x.strip()] if args.declared_intents else None
+
+    ensure_out_dir(args.out, args.overwrite)
+
+    events = read_jsonl_events(args.input)
+    badge, receipts = analyze_events(events, declared_intents, policy_cfg, args.profile, args.policy_sim)
+
+    write_json(os.path.join(args.out, "badge.json"), badge)
+    write_jsonl(os.path.join(args.out, "receipts.jsonl"), receipts)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
