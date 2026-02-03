@@ -4,19 +4,17 @@
 Proposal / Research Preview
 
 ## Abstract
-Defines the **advisory (non-enforcing)** policy simulation output.
+Defines the advisory (non-enforcing) policy simulation output.
 
-Policy simulation is not a firewall. It converts risk highlights into a conservative "would_block" signal to help research, evaluation, and higher-layer governance.
+Policy simulation is not a firewall. It converts risk highlights into a conservative `would_block` signal to help research, evaluation, and higher-layer governance.
 
 ## badge.json extension
 When `--policy-sim` is enabled, `badge.json` includes:
-
-- `policy_simulation` (object)
-  - `enabled` (bool): true
-  - `profile` (string): active profile name
-  - `would_block` (bool)
-  - `violation_count` (int)
-  - `violations` (array[string])
+- `policy_simulation.enabled` (true)
+- `policy_simulation.profile` (string)
+- `policy_simulation.would_block` (bool)
+- `policy_simulation.violation_count` (int)
+- `policy_simulation.violations` (array[string])
 
 ## policy.json (optional) format
 `--config policy.json` supports:
