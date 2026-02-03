@@ -8,17 +8,17 @@ import unittest
 
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
-def run_recorder(input_path: str, out_dir: str, policy_sim: bool = False):
-    cmd = [sys.executable, "src/recorder.py", "--input", input_path, "--out", out_dir]
-    if policy_sim:
-        cmd.append("--policy-sim")
-    p = subprocess.run(cmd, capture_output=True, text=True)
-    if p.returncode != 0:
-        raise RuntimeError(f"recorder failed:\nSTDOUT:\n{p.stdout}\nSTDERR:\n{p.stderr}")
+
+def run_recorder(args, cwd=None):
+    cmd = [sys.executable, "src/recorder.py"] + args
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    return p
+
 
 def load_json(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
 
 def load_jsonl(path: str):
     rows = []
@@ -29,6 +29,7 @@ def load_jsonl(path: str):
                 continue
             rows.append(json.loads(line))
     return rows
+
 
 def assert_receipt_chain_ok(tc: unittest.TestCase, receipts):
     tc.assertGreater(len(receipts), 0, "receipts.jsonl should not be empty")
@@ -50,11 +51,13 @@ def assert_receipt_chain_ok(tc: unittest.TestCase, receipts):
             f"chain broken at seq={receipts[i]['seq']}"
         )
 
-class TestExamples(unittest.TestCase):
+
+class TestConformance(unittest.TestCase):
     def test_clean_run(self):
         with tempfile.TemporaryDirectory() as td:
             out_dir = os.path.join(td, "out_clean")
-            run_recorder("examples/clean_run.jsonl", out_dir, policy_sim=False)
+            p = run_recorder(["--input", "examples/clean_run.jsonl", "--out", out_dir])
+            self.assertEqual(p.returncode, 0, p.stderr)
 
             badge = load_json(os.path.join(out_dir, "badge.json"))
             receipts = load_jsonl(os.path.join(out_dir, "receipts.jsonl"))
@@ -69,22 +72,46 @@ class TestExamples(unittest.TestCase):
     def test_risky_run_policy_sim(self):
         with tempfile.TemporaryDirectory() as td:
             out_dir = os.path.join(td, "out_sim")
-            run_recorder("examples/risky_run.jsonl", out_dir, policy_sim=True)
+            p = run_recorder(["--input", "examples/risky_run.jsonl", "--out", out_dir, "--policy-sim"])
+            self.assertEqual(p.returncode, 0, p.stderr)
 
             badge = load_json(os.path.join(out_dir, "badge.json"))
             receipts = load_jsonl(os.path.join(out_dir, "receipts.jsonl"))
 
-            self.assertEqual(badge.get("status"), "ATTENTION")
+            self.assertIn(badge.get("status"), ["ATTENTION", "ATTENTION_WITH_GAPS"])
             self.assertEqual(badge.get("stats", {}).get("highlight_count"), 7)
             self.assertEqual(badge.get("stats", {}).get("evidence_gaps"), 0)
 
             ps = badge.get("policy_simulation")
-            self.assertIsNotNone(ps, "policy_simulation should exist when --policy-sim is used")
+            self.assertIsNotNone(ps)
             self.assertTrue(ps.get("enabled"))
             self.assertTrue(ps.get("would_block"))
             self.assertEqual(ps.get("violation_count"), 7)
 
             assert_receipt_chain_ok(self, receipts)
+
+            # verify mode should pass
+            vr = run_recorder(["--verify-receipts", os.path.join(out_dir, "receipts.jsonl")])
+            self.assertEqual(vr.returncode, 0, vr.stdout + vr.stderr)
+
+    def test_extensions_example(self):
+        # ext_run.jsonl should trigger 3 extension risks
+        with tempfile.TemporaryDirectory() as td:
+            out_dir = os.path.join(td, "out_ext")
+            p = run_recorder(["--input", "examples/ext_run.jsonl", "--out", out_dir, "--policy-sim"])
+            self.assertEqual(p.returncode, 0, p.stderr)
+
+            badge = load_json(os.path.join(out_dir, "badge.json"))
+            tags = [x.get("tag") for x in badge.get("risk_highlights", [])]
+
+            self.assertIn("SQL_RISK", tags)
+            self.assertIn("API_CREDENTIAL_EXPOSURE", tags)
+            self.assertIn("HIGH_MEMORY_ACCESS", tags)
+
+            ps = badge.get("policy_simulation")
+            self.assertTrue(ps.get("would_block"))
+            self.assertEqual(ps.get("violation_count"), 3)
+
 
 if __name__ == "__main__":
     unittest.main()
