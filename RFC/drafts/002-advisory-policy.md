@@ -1,28 +1,49 @@
-# Draft 002: Advisory Risk Signals (Experimental)
+# RFC 002: Advisory Policy Simulation
 
 ## Status
-Draft / Optional / Not part of RFC-001 standard
+Proposal / Research Preview
 
-## Purpose
-This document describes optional “advisory” signals used by `--policy-sim`.
-It is NOT required for the standard Flight Log, and it should NOT be treated as enforcement.
+## Abstract
+Defines the **advisory (non-enforcing)** policy simulation output.
 
-## Advisory Signals (examples)
-If enabled, the recorder may flag these as “would be blocked under strict policy”:
+Policy simulation is not a firewall. It converts risk highlights into a conservative "would_block" signal to help research, evaluation, and higher-layer governance.
 
-- **Execution Violation**
-  - `PROC_EXEC` where `declared: false`
-  - or command matches remote script patterns (`curl|bash`, `wget|sh`)
+## badge.json extension
+When `--policy-sim` is enabled, `badge.json` includes:
 
-- **Data Egress (Undeclared)**
-  - `NET_IO` outbound where `declared: false`
+- `policy_simulation` (object)
+  - `enabled` (bool): true
+  - `profile` (string): active profile name
+  - `would_block` (bool)
+  - `violation_count` (int)
+  - `violations` (array[string])
 
-- **System Tampering**
-  - `FILE_IO` write/delete to sensitive system paths (e.g., `/etc/`, `System/`, `Windows/`)
+## policy.json (optional) format
+`--config policy.json` supports:
 
-- **Supply Chain Risk**
-  - `DEP_INSTALL` with unpinned versions (`latest`, `*`)
-
-## Notes
-- This mapping is intentionally conservative.
-- The default mode of this repo is **observability-only**.
+```json
+{
+  "profile": "advisory",
+  "profiles": {
+    "advisory": {
+      "block_unpinned_deps": true,
+      "block_undeclared_actions": true,
+      "block_sensitive_paths": true,
+      "block_remote_script": true,
+      "block_sql_risks": true,
+      "block_api_exposure": true,
+      "block_high_memory": true,
+      "block_on_gaps": false,
+      "block_on_unknown": false
+    },
+    "strict_advisory": {
+      "block_on_gaps": true,
+      "block_on_unknown": true
+    }
+  },
+  "policy_rules": {
+    "block_on_gaps": true
+  },
+  "sensitive_prefixes": ["/etc/", "/var/log/"],
+  "memory_threshold_bytes": 1000000000
+}
