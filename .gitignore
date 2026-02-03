@@ -1,25 +1,30 @@
-__pycache__/
-*.py[cod]
-.DS_Store
+# local outputs
 out_*/
-*.log
-# ---- local outputs (do not commit) ----
-out_*/
-out_report/
 out_clean/
 out_sim/
+out_ext/
+out_report/
+reports/
+output/
+outputs/
 
-# ---- python cache ----
+# python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# ---- virtualenv ----
+# venv
 .venv/
 venv/
 ENV/
+env/
 
-# ---- mac/windows junk ----
+# editor / os junk
 .DS_Store
 Thumbs.db
+.vscode/
+.idea/
+
+# logs
+*.log
