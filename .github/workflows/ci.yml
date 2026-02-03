@@ -1,7 +1,18 @@
 name: ci
+
 on:
   push:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "examples/**"
+      - ".github/workflows/ci.yml"
   pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "examples/**"
+      - ".github/workflows/ci.yml"
 
 jobs:
   verify:
@@ -10,6 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
