@@ -1,6 +1,7 @@
 # OpenClaw Flight Recorder (Research Preview)
 
 [![CI](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/liangfeng-hu/openclaw-flight-recorder-verified)](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/releases)
 
 本项目是一个本地可观测性 PoC：输入 RFC-001 JSONL 事件日志，输出 **行为摘要**（badge.json）与 **可验证收据链**（receipts.jsonl），并提供 **CI 一致性验收**（tests + GitHub Actions）来防漂移。
 
