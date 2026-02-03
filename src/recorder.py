@@ -489,4 +489,116 @@ def verify_receipts_file(path: str) -> Tuple[bool, str]:
         if not _is_hex64(r["prev_hash"]): return False, f"bad prev_hash at seq={r.get('seq')}"
         if not _is_hex64(r["receipt_hash"]): return False, f"bad receipt_hash at seq={r.get('seq')}"
 
-        core = {"trace_id": r["trace_id"], "seq":_]()_
+        core = {"trace_id": r["trace_id"], "seq": r["seq"], "event_type": r["event_type"], "event_hash": r["event_hash"], "prev_hash": r["prev_hash"]}
+        expect = _sha256_hex_str(_canon_json(core))
+        if r["receipt_hash"] != expect:
+            return False, f"receipt_hash mismatch at seq={r.get('seq')}"
+
+    for i in range(1, len(rows)):
+        if rows[i]["prev_hash"] != rows[i-1]["receipt_hash"]:
+            return False, f"chain broken at seq={rows[i].get('seq')}"
+
+    return True, "OK"
+
+
+def maybe_write_anchor(out_dir: str, receipts: List[Dict[str, Any]], anchor_path: Optional[str]) -> Optional[str]:
+    if not anchor_path:
+        return None
+    final_hash = receipts[-1]["receipt_hash"] if receipts else ("0" * 64)
+    trace_id = receipts[-1]["trace_id"] if receipts else "unknown-trace"
+
+    anchor = {"trace_id": trace_id, "event_count": len(receipts), "final_receipt_hash": final_hash, "generated_at": _iso_now_utc()}
+    key = os.environ.get("FLIGHT_ANCHOR_KEY", "")
+    if key:
+        sig = hmac.new(key.encode("utf-8", errors="replace"), _canon_json(anchor).encode("utf-8"), hashlib.sha256).hexdigest()
+        anchor["hmac_sha256"] = sig
+
+    path = anchor_path if os.path.isabs(anchor_path) else os.path.join(out_dir, anchor_path)
+    write_json(path, anchor)
+    return path
+
+
+def parse_args(argv: List[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(description="OpenClaw Flight Recorder (offline analyzer)")
+    p.add_argument("--input", help="JSONL flight log input")
+    p.add_argument("--out", help="Output directory")
+    p.add_argument("--overwrite", action="store_true", help="Allow writing into a non-empty output directory")
+    p.add_argument("--policy-sim", action="store_true", help="Enable advisory policy simulation output")
+    p.add_argument("--config", default=None, help="Optional policy.json config (see RFC/002)")
+    p.add_argument("--profile", default=None, help="Policy profile name (advisory / strict_advisory)")
+    p.add_argument("--declared-intents", default="", help="Comma-separated event_types considered declared (fallback only)")
+    p.add_argument("--verify-receipts", default=None, help="Verify a receipts.jsonl file and exit")
+    p.add_argument("--anchor-out", default=None, help="Write anchor JSON (relative to out/ if not absolute)")
+    return p.parse_args(argv)
+
+
+def ensure_out_dir(out_dir: str, overwrite: bool) -> None:
+    if os.path.exists(out_dir):
+        if os.listdir(out_dir) and not overwrite:
+            raise SystemExit(f"Output dir not empty: {out_dir}. Use a new dir or pass --overwrite.")
+    else:
+        os.makedirs(out_dir, exist_ok=True)
+
+
+def read_jsonl_events(path: str) -> List[Dict[str, Any]]:
+    events: List[Dict[str, Any]] = []
+    with _safe_open_text(path) as f:
+        for lineno, line in enumerate(f, 1):
+            s = line.strip()
+            if not s:
+                continue
+            try:
+                obj = json.loads(s)
+                if not isinstance(obj, dict):
+                    raise ValueError("non-object json")
+                events.append(obj)
+            except Exception:
+                payload = f"parse_error_line_{lineno}"
+                ev = {
+                    "v": RFC_VERSION,
+                    "ts": _iso_now_utc(),
+                    "trace_id": "unknown-trace",
+                    "seq": lineno,
+                    "actor": "unknown",
+                    "event_type": "EVIDENCE_GAP",
+                    "payload_digest": "sha256:" + _sha256_hex_str(payload),
+                    "domain_class": "META",
+                    "declared": False,
+                    "data_complete": False,
+                    "details": {"reason": "json_parse_error", "lineno": lineno},
+                }
+                events.append(ev)
+    return events
+
+
+def main(argv: List[str]) -> int:
+    args = parse_args(argv)
+
+    if args.verify_receipts:
+        ok, msg = verify_receipts_file(args.verify_receipts)
+        print(msg)
+        return 0 if ok else 2
+
+    if not args.input or not args.out:
+        print("Error: --input and --out are required (unless --verify-receipts is used).", file=sys.stderr)
+        return 2
+
+    policy_cfg = load_policy_config(args.config)
+    declared_intents = [x.strip() for x in args.declared_intents.split(",") if x.strip()] if args.declared_intents else None
+
+    ensure_out_dir(args.out, args.overwrite)
+
+    events = read_jsonl_events(args.input)
+    badge, receipts = analyze_events(events, declared_intents, policy_cfg, args.profile, args.policy_sim)
+
+    write_json(os.path.join(args.out, "badge.json"), badge)
+    write_jsonl(os.path.join(args.out, "receipts.jsonl"), receipts)
+
+    # optional anchor
+    maybe_write_anchor(args.out, receipts, args.anchor_out)
+
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
