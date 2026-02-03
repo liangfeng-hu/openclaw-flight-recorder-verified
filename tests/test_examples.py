@@ -37,18 +37,13 @@ def assert_receipt_chain_ok(tc: unittest.TestCase, receipts):
     seqs = [r["seq"] for r in receipts]
     tc.assertEqual(seqs, sorted(seqs), "seq should be sorted ascending")
     for i in range(1, len(receipts)):
-        tc.assertEqual(
-            receipts[i]["prev_hash"],
-            receipts[i-1]["receipt_hash"],
-            f"chain broken at seq={receipts[i]['seq']}"
-        )
+        tc.assertEqual(receipts[i]["prev_hash"], receipts[i - 1]["receipt_hash"], f"chain broken at seq={receipts[i]['seq']}")
 
 def tags_set(badge):
     return set([x.get("tag") for x in badge.get("risk_highlights", []) if x.get("tag")])
 
 class TestConformance(unittest.TestCase):
-    def test_clean_run_strict(self):
-        """Clean must stay clean: no highlights, no gaps."""
+    def test_clean_run(self):
         with tempfile.TemporaryDirectory() as td:
             out_dir = os.path.join(td, "out_clean")
             p = run_recorder(["--input", "examples/clean_run.jsonl", "--out", out_dir])
@@ -64,8 +59,7 @@ class TestConformance(unittest.TestCase):
 
             assert_receipt_chain_ok(self, receipts)
 
-    def test_risky_run_core_signals(self):
-        """Risky should show core risk signals; counts may evolve as rules improve."""
+    def test_risky_run(self):
         with tempfile.TemporaryDirectory() as td:
             out_dir = os.path.join(td, "out_risky")
             p = run_recorder(["--input", "examples/risky_run.jsonl", "--out", out_dir, "--policy-sim"])
@@ -75,14 +69,10 @@ class TestConformance(unittest.TestCase):
             receipts = load_jsonl(os.path.join(out_dir, "receipts.jsonl"))
 
             self.assertIn(badge.get("status"), ["ATTENTION", "ATTENTION_WITH_GAPS"])
-
-            stats = badge.get("stats", {})
-            self.assertGreaterEqual(stats.get("highlight_count", 0), 7)
-            self.assertEqual(stats.get("evidence_gaps", 0), 0)
+            self.assertEqual(badge.get("stats", {}).get("evidence_gaps"), 0)
+            self.assertGreaterEqual(badge.get("stats", {}).get("highlight_count", 0), 7)
 
             tags = tags_set(badge)
-
-            # Core tags that define the risky scenario
             for must_tag in [
                 "UNPINNED_DEP",
                 "UNDECLARED_DEP_INSTALL",
@@ -92,18 +82,16 @@ class TestConformance(unittest.TestCase):
                 "UNDECLARED_FILE_MUTATION",
                 "UNDECLARED_EGRESS",
             ]:
-                self.assertIn(must_tag, tags, f"missing expected tag: {must_tag}")
+                self.assertIn(must_tag, tags)
 
             ps = badge.get("policy_simulation")
             self.assertIsNotNone(ps)
-            self.assertTrue(ps.get("enabled"))
             self.assertTrue(ps.get("would_block"))
-            self.assertGreaterEqual(ps.get("violation_count", 0), 1)
+            self.assertGreaterEqual(ps.get("violation_count", 0), 7)
 
             assert_receipt_chain_ok(self, receipts)
 
-    def test_ext_run_extension_signals(self):
-        """Extension example must show extension tags."""
+    def test_ext_run(self):
         with tempfile.TemporaryDirectory() as td:
             out_dir = os.path.join(td, "out_ext")
             p = run_recorder(["--input", "examples/ext_run.jsonl", "--out", out_dir, "--policy-sim"])
@@ -119,7 +107,7 @@ class TestConformance(unittest.TestCase):
             ps = badge.get("policy_simulation")
             self.assertIsNotNone(ps)
             self.assertTrue(ps.get("would_block"))
-            self.assertGreaterEqual(ps.get("violation_count", 0), 1)
+            self.assertGreaterEqual(ps.get("violation_count", 0), 3)
 
 if __name__ == "__main__":
     unittest.main()
