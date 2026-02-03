@@ -3,3 +3,23 @@ __pycache__/
 .DS_Store
 out_*/
 *.log
+# ---- local outputs (do not commit) ----
+out_*/
+out_report/
+out_clean/
+out_sim/
+
+# ---- python cache ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ---- virtualenv ----
+.venv/
+venv/
+ENV/
+
+# ---- mac/windows junk ----
+.DS_Store
+Thumbs.db
