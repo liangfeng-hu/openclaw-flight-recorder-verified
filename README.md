@@ -11,27 +11,31 @@ Agent Transparency Sidecar — Local-only, opt-in, read-only evidence recorder
 > **Zero-intrusion (no business-logic changes), opt-in, local-only, read-only by default.**  
 > **零侵入（无需改业务逻辑/工作流），可选接入（opt-in），默认本地只读。**  
 >
-> This is **not** a blocking firewall. `--policy-sim` is **advisory only**.
+> This is **not** a blocking firewall. `--policy-sim` and remediation outputs are **advisory only** (no auto-fix).
 
 ---
 
 ## What this provides
 Given a JSONL flight log, the recorder outputs:
+
 - **badge.json**: behavior summary + risk highlights  
-- **receipts.jsonl**: hash-chained, tamper-evident receipts (evidence chain)
+- **receipts.jsonl**: hash-chained, tamper-evident receipts (evidence chain)  
+- *(optional, extension)* **suggestions.json** + **probe_plan.md**: advisory remediation directions (no execution)
 
 This lets users verify: **“What did the agent actually do?”** with replayable evidence.
 
 ---
 
 ## Repo contents
-- `RFC/001-flight-log.md` — minimal JSONL event export contract
+- `RFC/001-flight-log.md` — minimal JSONL event export contract (Flight Log)
+- `RFC/004-remediation-advice-contract.md` — advisory remediation output contract (`suggestions.json`)
+- `RFC/drafts/003-websocket-token-safety-signals.md` — digest-only WS/gateway/token safety signals (draft)
 - `src/recorder.py` — reference recorder (stdlib-only)
-- `examples/*.jsonl` — clean vs risky traces
+- `src/recorder_ext.py` — experimental extension (advisory suggestions via `--suggest`)
+- `examples/*.jsonl` — clean vs risky traces (+ ws_token demo)
 - `tests/` — CI conformance tests
 - `VERIFY.md` — reproducibility & receipt-chain checks
 - `PRIVACY.md` / `SECURITY.md` — privacy & security notes
-- (Optional) `src/recorder_ext.py` — experimental extension (advisory suggestions via `--suggest`)
 
 ---
 
@@ -46,23 +50,62 @@ python src/recorder.py --input examples/risky_run.jsonl --out out_risky
 # Advisory policy simulation (optional)
 python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim
 
-Outputs:
+Outputs per run:
 
-badge.json (facts + highlights)
+badge.json
 
-receipts.jsonl (hash-chained receipts)
+receipts.jsonl
+
+Experimental: advisory suggestions (no auto-fix)
+
+If src/recorder_ext.py is present, you can generate remediation directions:
+
+python src/recorder_ext.py --input examples/risky_run.jsonl --out out_adv --overwrite --policy-sim --suggest
+
+Outputs (extension mode):
+
+suggestions.json (Draft-004 contract)
+
+probe_plan.md (human-friendly verification steps)
+
+policy_template.json (optional helper)
+
+Optional config (policy.json)
+
+You may provide --config policy.json to override thresholds/paths/rules.
+Default advisory rules are built-in; policy.json is optional.
+
+Example policy.json:
+
+{
+  "sensitive_paths": ["/etc/", "/var/log/"],
+  "policy_rules": {
+    "block_unpinned_deps": true,
+    "block_undeclared_actions": true,
+    "block_sensitive_access": true,
+    "block_sql_risks": true,
+    "block_api_exposure": true,
+    "block_high_memory": true,
+    "block_evidence_gap": false
+  },
+  "memory_threshold": 1000000000
+}
 
 Conformance / Reproducibility
 
 Pass/fail criteria: VERIFY.md
+
 Run tests:
 
 python -m unittest discover -s tests -p "test_*.py" -v
 
-Advisory configuration (optional)
+Receipt-chain rules (summary):
 
-You may provide --config policy.json to override thresholds/paths/rules.
-Default advisory rules are built-in; policy.json is optional.
+first prev_hash = 64 zeros
+
+each prev_hash == previous receipt_hash
+
+hashes are 64 hex chars
 
 Security / Privacy
 
@@ -72,7 +115,21 @@ No VS Code extension shipped
 
 No curl|sh installers
 
+No secrets logged (digest-first)
+
 See: PRIVACY.md, SECURITY.md, VERIFY.md.
+
+Non-goals
+
+Not a malware scanner
+
+Not an enforcement engine
+
+Not an exploit guide
+
+Not a centralized reputation system
+
+This tool is about transparent evidence and safe, local verification.
 
 License
 
@@ -80,29 +137,5 @@ MIT — see LICENSE.
 
 If the CI badge doesn’t refresh, reload the page or ensure it points to the correct workflow file under .github/workflows/.
 
-
----
-
-# 方案 B：把 RFC/002 补回来（也可以，但不推荐）
-如果你坚持保留 RFC-002 的“文件存在且可点开”，那就：
-- 新建 `RFC/002-advisory-policy.md`
-- 内容写清：policy-sim 输出字段 + policy.json 结构
-
-但你之前策略就是“RFC-002 降级为 draft / optional”，所以现在更合适的是 **方案 A**（删引用/不强依赖）。
-
----
-
-# 你问“是否需要修正？和上面的补全一并修正最终稿”
-✅ **需要修正**，而且建议你用 **方案 A-2（整份替换 README）**一次性封板，最省心、最不容易贴错。
-
----
-
-## 你现在要做的操作（1 分钟）
-1) 打开仓库 → 点 `README.md`  
-2) ✏️ Edit  
-3) 全选删除  
-4) 粘贴我给你的“整份最终 README”  
-5) Commit changes  
-
-做完你就达到你说的 **100% 无残留**，可以直接发给对方。
 ::contentReference[oaicite:0]{index=0}
+
