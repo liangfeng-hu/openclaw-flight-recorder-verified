@@ -3,7 +3,12 @@
 # - RFC-001 details-compatible
 # - Deterministic receipt_hash
 # - Optional policy simulation
-# - NEW: advisory suggestions (facts -> template), no auto-fix
+# - Advisory suggestions (facts -> template), no auto-fix
+#
+# CI-stability patch:
+# - Robust import: generate_advice <-> generate_suggestions both supported
+# - Robust call wrapper: tolerates different function signatures
+# - Unifies outbound tag to UNDECLARED_EGRESS (matches main recorder style)
 
 import argparse
 import json
@@ -17,7 +22,35 @@ import hashlib
 
 # Ensure local imports from src/
 sys.path.insert(0, os.path.dirname(__file__))
-from remediation_advisor import generate_suggestions, build_probe_plan_md  # noqa
+
+# --- robust imports: tolerate renames (generate_suggestions <-> generate_advice) ---
+try:
+    from remediation_advisor import generate_advice as _GEN_ADVICE  # newer name
+except Exception:
+    from remediation_advisor import generate_suggestions as _GEN_ADVICE  # older name
+
+from remediation_advisor import build_probe_plan_md as _BUILD_PLAN  # stable name
+
+
+def _call_generate_advice(badge: Dict[str, Any], input_hint: str = "", receipt_chain_tip: str = "") -> Dict[str, Any]:
+    """
+    Compatibility wrapper:
+    - supports generate_advice(badge=..., input_hint=..., receipt_chain_tip=...)
+    - and generate_suggestions(badge, input_hint)
+    """
+    # Try keyword-rich call first
+    try:
+        return _GEN_ADVICE(badge=badge, input_hint=input_hint, receipt_chain_tip=receipt_chain_tip)
+    except TypeError:
+        pass
+    # Try positional (3 args)
+    try:
+        return _GEN_ADVICE(badge, input_hint, receipt_chain_tip)
+    except TypeError:
+        pass
+    # Try positional (2 args)
+    return _GEN_ADVICE(badge, input_hint)
+
 
 DEFAULT_SENSITIVE_PATHS = ["/etc/", "/var/log/", "/home/user/.ssh/"]
 DEFAULT_POLICY_RULES = {
@@ -107,12 +140,10 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
     ev_hash = sha256_hex(canon_json(event))
     declared = get_declared(event, declared_intents)
 
-    # DEP_INSTALL (RFC-001 details compatible)
     if et == "DEP_INSTALL":
         pkg = safe_str(get_field(event, "package", ""))
         ver = safe_str(get_field(event, "version", ""))
         dep_name = safe_str(get_field(event, "dep_name", ""))
-
         if ver and UNPINNED_VER_PAT.search(ver):
             risks.append({"tag": "UNPINNED_DEP", "seq": seq, "evidence": ev_hash})
         if dep_name and "@latest" in dep_name:
@@ -120,7 +151,6 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         if not declared:
             risks.append({"tag": "UNDECLARED_DEP_INSTALL", "seq": seq, "evidence": ev_hash})
 
-    # PROC_EXEC
     elif et == "PROC_EXEC":
         cmd = safe_str(get_field(event, "cmd", ""))
         if cmd and REMOTE_SCRIPT_PAT.search(cmd):
@@ -128,32 +158,27 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         if not declared:
             risks.append({"tag": "UNDECLARED_EXEC", "seq": seq, "evidence": ev_hash})
 
-    # FILE_IO
     elif et == "FILE_IO":
         path = safe_str(get_field(event, "path", ""))
         op = safe_str(get_field(event, "op", "")).lower()
         mode = safe_str(get_field(event, "mode", "")).lower()
-
         if path and any(path.startswith(pfx) for pfx in sensitive_paths):
             risks.append({"tag": "SENSITIVE_PATH", "seq": seq, "evidence": ev_hash})
-
         is_mutation = op in ("write", "delete") or mode in ("w", "a", "x")
         if is_mutation and not declared:
             risks.append({"tag": "UNDECLARED_FILE_MUTATION", "seq": seq, "evidence": ev_hash})
 
-    # NET_IO
     elif et == "NET_IO":
         direction = safe_str(get_field(event, "direction", "")).upper()
         if direction == "OUT" and not declared:
-            risks.append({"tag": "UNDECLARED_NET_IO", "seq": seq, "evidence": ev_hash})
+            # unify tag name to match main recorder expectations
+            risks.append({"tag": "UNDECLARED_EGRESS", "seq": seq, "evidence": ev_hash})
 
-    # DATABASE_OP
     elif et == "DATABASE_OP":
         query = safe_str(get_field(event, "query", "")).lower()
         if "drop" in query or ("delete" in query and "where" not in query):
             risks.append({"tag": "SQL_INJECTION_RISK", "seq": seq, "evidence": ev_hash})
 
-    # API_CALL
     elif et == "API_CALL":
         headers = get_field(event, "headers", {}) or {}
         if not isinstance(headers, dict):
@@ -173,7 +198,6 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         if found:
             risks.append({"tag": "API_KEY_EXPOSURE", "seq": seq, "evidence": ev_hash})
 
-    # MEMORY_ACCESS
     elif et == "MEMORY_ACCESS":
         size = get_field(event, "size", 0)
         try:
@@ -183,7 +207,6 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         if size_int > int(memory_threshold):
             risks.append({"tag": "MEMORY_OVERFLOW_RISK", "seq": seq, "evidence": ev_hash})
 
-    # Draft-003: GATEWAY_URL_SET / WS_CONNECT / CRED_SEND
     elif et == "GATEWAY_URL_SET":
         src = safe_str(get_field(event, "gateway_source", "unknown"))
         vr = safe_str(get_field(event, "validation_result", "UNKNOWN")).upper()
@@ -209,7 +232,6 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         if not declared:
             risks.append({"tag": "UNDECLARED_CRED_SEND", "seq": seq, "evidence": ev_hash})
 
-    # Evidence gap
     if is_evidence_gap(event):
         risks.append({"tag": "EVIDENCE_GAP", "seq": seq, "evidence": ev_hash})
 
@@ -224,7 +246,7 @@ def simulate_policy(risks: List[Dict[str, Any]], policy_rules: Dict[str, bool]) 
     def block(tag: str) -> bool:
         if tag in ("UNPINNED_DEP", "UNDECLARED_DEP_INSTALL"):
             return policy_rules.get("block_unpinned_deps", True)
-        if tag in ("REMOTE_SCRIPT", "UNDECLARED_EXEC", "UNDECLARED_FILE_MUTATION", "UNDECLARED_NET_IO", "UNDECLARED_CRED_SEND"):
+        if tag in ("REMOTE_SCRIPT", "UNDECLARED_EXEC", "UNDECLARED_FILE_MUTATION", "UNDECLARED_EGRESS", "UNDECLARED_CRED_SEND"):
             return policy_rules.get("block_undeclared_actions", True)
         if tag in ("SENSITIVE_PATH", "WS_TO_LOCALHOST"):
             return policy_rules.get("block_sensitive_access", True)
@@ -235,7 +257,7 @@ def simulate_policy(risks: List[Dict[str, Any]], policy_rules: Dict[str, bool]) 
         if tag == "MEMORY_OVERFLOW_RISK":
             return policy_rules.get("block_high_memory", True)
         if tag in ("UNTRUSTED_GATEWAY_SOURCE", "AUTO_WS_CONNECT", "CRED_CROSS_BOUNDARY"):
-            return True  # conservative in sim mode
+            return True
         if tag == "EVIDENCE_GAP":
             return policy_rules.get("block_evidence_gap", False)
         return False
@@ -290,7 +312,7 @@ def build_receipts(events: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         base = {"trace_id": trace_id, "seq": seq, "event_type": et, "event_hash": ev_hash, "prev_hash": prev}
         rh = sha256_hex(canon_json(base))
         receipt = dict(base)
-        receipt["event_ts"] = e.get("ts", None)  # deterministic metadata
+        receipt["event_ts"] = e.get("ts", None)
         receipt["receipt_hash"] = rh
         receipts.append(receipt)
         prev = rh
@@ -373,7 +395,6 @@ def main() -> None:
     for ev in events:
         et = safe_str(ev.get("event_type", ""))
 
-        # behavior summary
         if et == "NET_IO" and safe_str(get_field(ev, "direction", "")).upper() == "OUT":
             behavior["network_out"].add(f"HOST:{safe_str(get_field(ev,'host','unknown'))}:{safe_str(get_field(ev,'port',''))}")
         elif et == "FILE_IO" and safe_str(get_field(ev, "op", "")).lower() in ("write", "delete"):
@@ -398,7 +419,6 @@ def main() -> None:
         elif et in ("WS_CONNECT", "GATEWAY_URL_SET", "CRED_SEND"):
             behavior["network_out"].add(f"NET_EXT:{et}")
 
-        # risks
         r = detect_risks(ev, declared_intents, sensitive_paths, memory_threshold)
         risks_all.extend(r)
         if any(x.get("tag") == "EVIDENCE_GAP" for x in r):
@@ -426,17 +446,12 @@ def main() -> None:
     write_jsonl(os.path.join(args.out, "receipts.jsonl"), receipts)
 
     if args.suggest:
-        pack = generate_suggestions(badge, input_hint=args.input)
+        pack = _call_generate_advice(badge, input_hint=args.input, receipt_chain_tip="")
         write_json(os.path.join(args.out, "suggestions.json"), pack)
         with open(os.path.join(args.out, "probe_plan.md"), "w", encoding="utf-8") as f:
-            f.write(build_probe_plan_md(pack))
+            f.write(_BUILD_PLAN(pack))
 
-        # Optional: output a template policy file for convenience
-        tpl = {
-            "sensitive_paths": sensitive_paths,
-            "policy_rules": policy_rules,
-            "memory_threshold": memory_threshold
-        }
+        tpl = {"sensitive_paths": sensitive_paths, "policy_rules": policy_rules, "memory_threshold": memory_threshold}
         write_json(os.path.join(args.out, "policy_template.json"), tpl)
 
     print(json.dumps(badge, indent=2, ensure_ascii=False))
