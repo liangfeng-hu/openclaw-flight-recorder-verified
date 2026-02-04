@@ -2,17 +2,34 @@ name: ci
 
 on:
   push:
+    branches: ["main"]
     paths:
       - "src/**"
       - "tests/**"
       - "examples/**"
-      - ".github/workflows/ci.yml"
+      - "RFC/**"
+      - "README.md"
+      - "PRIVACY.md"
+      - "SECURITY.md"
+      - "VERIFY.md"
+      - "requirements.txt"
+      - "LICENSE"
+      - ".github/workflows/**"
   pull_request:
+    branches: ["main"]
     paths:
       - "src/**"
       - "tests/**"
       - "examples/**"
-      - ".github/workflows/ci.yml"
+      - "RFC/**"
+      - "README.md"
+      - "PRIVACY.md"
+      - "SECURITY.md"
+      - "VERIFY.md"
+      - "requirements.txt"
+      - "LICENSE"
+      - ".github/workflows/**"
+  workflow_dispatch:
 
 jobs:
   verify:
