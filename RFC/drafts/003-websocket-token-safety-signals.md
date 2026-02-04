@@ -112,3 +112,34 @@ Non-enforcing tags a recorder may add:
 {"v":"flight-log/1","ts":"2026-02-03T00:00:00Z","trace_id":"demo-ws","seq":1,"actor":"client","event_type":"GATEWAY_URL_SET","payload_digest":"sha256:aaaa","domain_class":"NET","declared":false,"details":{"gateway_source":"query_param","url_digest":"sha256:1111","validation_result":"FAIL","allowlist_hit":false,"reason_code":"URL_NOT_ALLOWLISTED"}}
 {"v":"flight-log/1","ts":"2026-02-03T00:00:01Z","trace_id":"demo-ws","seq":2,"actor":"client","event_type":"WS_CONNECT","payload_digest":"sha256:bbbb","domain_class":"NET","declared":false,"details":{"direction":"OUT","protocol":"wss","host":"gateway.example.com","port":443,"url_digest":"sha256:2222","origin_digest":"sha256:3333","gateway_source":"query_param","auto_connect":true}}
 {"v":"flight-log/1","ts":"2026-02-03T00:00:02Z","trace_id":"demo-ws","seq":3,"actor":"client","event_type":"CRED_SEND","payload_digest":"sha256:cccc","domain_class":"NET","declared":false,"details":{"cred_type":"auth_token","cred_digest":"sha256:4444","target_host":"gateway.example.com","target_port":443,"transport":"wss","auto_send":true}}
+
+
+---
+
+# 3）三个“模板残留”建议你一并清掉（强烈推荐）
+你之前仓库里出现过这些占位/重复内容会拉低可信度；现在建议直接“全文件替换”最省事：
+
+## 3.1 替换 LICENSE（把 `<YOUR_NAME>` 变成真实作者）
+文件名称：《LICENSE》（纯文本版）
+```text
+MIT License
+
+Copyright (c) 2026 liangfeng-hu
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
