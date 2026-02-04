@@ -1,5 +1,5 @@
 # Agent 透明外挂｜安全检测评估记录器（Research Preview）
-Agent Transparency Sidecar — Security Audit & Evidence Recorder (Local-Only)
+Agent Transparency Sidecar — Local-only, opt-in, read-only evidence recorder
 
 [![CI](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml?branch=main)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
@@ -10,34 +10,28 @@ Agent Transparency Sidecar — Security Audit & Evidence Recorder (Local-Only)
 
 > **Zero-intrusion (no business-logic changes), opt-in, local-only, read-only by default.**  
 > **零侵入（无需改业务逻辑/工作流），可选接入（opt-in），默认本地只读。**  
-> Converts agent event streams (JSONL) into:
-> - **badge.json**: human-readable behavior summary + risk highlights  
-> - **receipts.jsonl**: hash-chained, tamper-evident receipts (evidence chain)  
 >
 > This is **not** a blocking firewall. `--policy-sim` is **advisory only**.
 
 ---
 
-## What problem this solves
-Agents can behave like black boxes. After a skill/agent run, users and developers need to know:
+## What this provides
+Given a JSONL flight log, the recorder outputs:
 
-- What files were touched (read/write/delete)?
-- What network hosts were contacted?
-- Were any processes executed?
-- Were any dependencies installed during runtime?
+- **badge.json**: behavior summary + risk highlights  
+- **receipts.jsonl**: hash-chained, tamper-evident receipts (evidence chain)
 
-This repo provides a simple, local recorder so you can answer:  
-**“What did the agent actually do?”** — with verifiable evidence.
+This lets users verify: **“What did the agent actually do?”** with replayable evidence.
 
 ---
 
-## What’s in this repo
-1) **RFC-001 Flight Log (JSONL)**: `RFC/001-flight-log.md`  
-2) **Recorder (stdlib-only Python)**: `src/recorder.py`  
-3) **Examples**: clean vs risky runs: `examples/*.jsonl`  
-4) **Reproducibility checks**: `VERIFY.md` + `tests/`  
-5) (Optional) **Draft RFCs** under `RFC/drafts/` for experimental extensions  
-6) (Optional) **Extension Recorder** (if present): `src/recorder_ext.py` for advisory suggestions (`--suggest`)
+## Repo contents
+- `RFC/001-flight-log.md` — minimal JSONL event export contract
+- `src/recorder.py` — reference recorder (stdlib-only)
+- `examples/*.jsonl` — clean vs risky traces
+- `tests/` — CI conformance tests
+- `VERIFY.md` — reproducibility & receipt-chain checks
+- `PRIVACY.md` / `SECURITY.md` — privacy & security notes
 
 ---
 
@@ -52,56 +46,20 @@ python src/recorder.py --input examples/risky_run.jsonl --out out_risky
 # Advisory policy simulation (optional)
 python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim
 
-Outputs (per run):
+Conformance / Reproducibility
 
-badge.json (facts + highlights)
-
-receipts.jsonl (hash-chained receipts)
-
-Reproducibility / Conformance
-
-See:
-
-VERIFY.md for pass/fail criteria and receipt-chain rules
-
-tests/ for CI-compatible checks
-
-Run tests locally:
+Pass/fail criteria: VERIFY.md
+Run tests:
 
 python -m unittest discover -s tests -p "test_*.py" -v
 
-Security / Privacy / Verification
+Security / Privacy
 
-SECURITY.md — reporting and scope
+Local-only by default; share only digests/summaries
 
-PRIVACY.md — local-only & digest-first guidance
+No VS Code extension shipped
 
-VERIFY.md — reproducibility + verification checks
+No curl|sh installers
 
-LICENSE — MIT
+See: PRIVACY.md, SECURITY.md, VERIFY.md.
 
-If the CI badge doesn’t refresh, reload the page or ensure it points to the correct workflow file under .github/workflows/.
-
-Non-goals
-
-Not a malware scanner
-
-Not an enforcement engine
-
-Not an exploit guide
-
-Not a centralized reputation system
-
-This tool is about transparent evidence and safe, local verification.
-
-
----
-
-使用方法（iPhone 也可以）：
-1) 打开仓库 → 点 `README.md`  
-2) 右上角 ✏️ Edit  
-3) 全选删掉 → 粘贴上面整份内容  
-4) 滑到最下面 → `Commit changes`
-
-如果你愿意，我下一条可以再帮你把 README 的“中英双语比例”调整成更统一的风格（例如：标题/关键口号双语，其余全英文），这样更符合 OpenClaw 国际维护者阅读习惯。
-::contentReference[oaicite:0]{index=0}
