@@ -15,20 +15,20 @@
 
 ### 1.1 Clean（必须干净）
 运行：
-python src/recorder.py --input examples/clean_run.jsonl --out out_clean --overwrite
+python src/recorder.py --input examples/clean_run.jsonl --out out_clean
 
 必须满足：
-- badge.json.status == "OBSERVED"
+- badge.json.status == OBSERVED
 - badge.json.stats.highlight_count == 0
 - badge.json.stats.evidence_gaps == 0
 - badge.json.risk_highlights 为空
 
 ### 1.2 Risky（必须出现核心风险信号）
 运行：
-python src/recorder.py --input examples/risky_run.jsonl --out out_risky --overwrite --policy-sim
+python src/recorder.py --input examples/risky_run.jsonl --out out_risky --policy-sim
 
 必须满足：
-- badge.json.status == "ATTENTION"（本示例要求 evidence_gaps == 0）
+- badge.json.status 为 ATTENTION（本示例要求 evidence_gaps == 0）
 - badge.json.policy_simulation.would_block == true
 - badge.json.stats.highlight_count >= 7
 - badge.json.policy_simulation.violation_count >= 7
@@ -60,4 +60,4 @@ python -m unittest discover -s tests -p "test_*.py" -v
 ## 4. 常见失败原因
 - .jsonl 文件每一行必须是“合法的单行 JSON”，不能出现换行断裂
 - .jsonl 文件里不要出现任何额外文字（例如：```jsonl、文件名称：、注释）
-- 输出目录非空但未加 --overwrite，会直接退出（这是刻意设计）
+- 输出目录已存在且非空：请换一个 --out 目录名（例如 out_clean_2）
