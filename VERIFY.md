@@ -11,41 +11,40 @@
 
 ---
 
-## 1. 本地快速验收
+## 1. 本地快速验收（主线 recorder.py）
 
 ### 1.1 Clean（必须干净）
-python src/recorder.py --input examples/clean_run.jsonl --out out_clean
+运行：
+python src/recorder.py --input examples/clean_run.jsonl --out out_clean --overwrite
 
 必须满足：
-- status == OBSERVED
-- highlight_count == 0
-- evidence_gaps == 0
-- risk_highlights 为空
+- badge.json.status == "OBSERVED"
+- badge.json.stats.highlight_count == 0
+- badge.json.stats.evidence_gaps == 0
+- badge.json.risk_highlights 为空
 
 ### 1.2 Risky（必须出现核心风险信号）
-python src/recorder.py --input examples/risky_run.jsonl --out out_risky --policy-sim
+运行：
+python src/recorder.py --input examples/risky_run.jsonl --out out_risky --overwrite --policy-sim
 
 必须满足：
-- status 为 ATTENTION（本示例要求 evidence_gaps == 0）
-- would_block == true
-- highlight_count >= 7
-- violation_count >= 7
-- 必须包含以下标签：
-  UNPINNED_DEP, UNDECLARED_DEP_INSTALL, REMOTE_SCRIPT, UNDECLARED_EXEC,
-  SENSITIVE_PATH, UNDECLARED_FILE_MUTATION, UNDECLARED_EGRESS
-
-### 1.3 Extensions（扩展类型必须可工作）
-python src/recorder.py --input examples/ext_run.jsonl --out out_ext --policy-sim
-
-必须满足：
-- would_block == true
-- violation_count >= 3
-- 必须包含以下标签：
-  SQL_RISK, API_CREDENTIAL_EXPOSURE, HIGH_MEMORY_ACCESS
+- badge.json.status == "ATTENTION"（本示例要求 evidence_gaps == 0）
+- badge.json.policy_simulation.would_block == true
+- badge.json.stats.highlight_count >= 7
+- badge.json.policy_simulation.violation_count >= 7
+- risk_highlights 必须包含以下标签（至少各 1 次）：
+  UNPINNED_DEP,
+  UNDECLARED_DEP_INSTALL,
+  REMOTE_SCRIPT,
+  UNDECLARED_EXEC,
+  SENSITIVE_PATH,
+  UNDECLARED_FILE_MUTATION,
+  UNDECLARED_EGRESS
 
 ---
 
 ## 2. 一致性测试（CI 同口径）
+运行：
 python -m unittest discover -s tests -p "test_*.py" -v
 
 ---
@@ -56,11 +55,9 @@ python -m unittest discover -s tests -p "test_*.py" -v
 - 从第二条开始：每条 prev_hash 等于上一条 receipt_hash
 - event_hash / prev_hash / receipt_hash 都是 64 位十六进制字符串
 
-### 3.2 一键验链（若 recorder.py 支持）
-python src/recorder.py --verify-receipts out_risky/receipts.jsonl
-
 ---
 
 ## 4. 常见失败原因
 - .jsonl 文件每一行必须是“合法的单行 JSON”，不能出现换行断裂
 - .jsonl 文件里不要出现任何额外文字（例如：```jsonl、文件名称：、注释）
+- 输出目录非空但未加 --overwrite，会直接退出（这是刻意设计）
