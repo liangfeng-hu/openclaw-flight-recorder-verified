@@ -1,111 +1,76 @@
 # OpenClaw Flight Recorder (Research Preview)
 
-[![CI](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/liangfeng-hu/openclaw-flight-recorder-verified)](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/releases)
+The "Black Box" for AI Agents.
+A local, opt-in observability tool that digests agent event streams into human-readable Activity Summaries and Verifiable Receipts.
 
-本项目是一个本地可观测性 PoC：输入 RFC-001 JSONL 事件日志，输出 **行为摘要**（badge.json）与 **可验证收据链**（receipts.jsonl），并提供 **CI 一致性验收**（tests + GitHub Actions）来防漂移。
+## What problem this solves
+Agents often behave like black boxes. After a skill runs, users and developers need to know:
+- What files were touched (read/write/delete)?
+- What network hosts were contacted?
+- Were any processes executed?
+- Were any dependencies installed during runtime?
 
-> 定位：诊断工具（dashcam / black box），不是阻断防火墙。  
-> `--policy-sim` 仅为 advisory（建议性）信号，用于研究/对齐更高层治理系统。
+This project provides a simple, local Flight Recorder so you can answer: "What did the agent actually do?"
 
----
+## What’s in this repo
+1) RFC-001 Flight Log (JSONL): a minimal event export contract (`RFC/001-flight-log.md`)
+2) Reference recorder implementation (stdlib-only Python): `src/recorder.py`
+3) Examples: clean vs risky runs (`examples/*.jsonl`)
+4) Reproducibility/Conformance: `VERIFY.md` + `tests/`
 
-## Quickstart
-
-生成报告（保持主线兼容）：
-
-- `python src/recorder.py --input examples/clean_run.jsonl --out out_clean`
-- `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim`
-- `python src/recorder.py --input examples/ext_run.jsonl --out out_ext --policy-sim`
-
-运行一致性验收（Conformance Suite）：
-
-- `python -m unittest discover -s tests -p "test_*.py" -v`
-
-CI：
-
-- GitHub Actions 会在每次 push / PR 自动跑 Conformance Suite（避免静默漂移）。
-
----
-
-## Windows PowerShell（傻瓜化示例）
-
-运行 clean 示例并查看结果：
-
-- `python src/recorder.py --input examples/clean_run.jsonl --out out_clean`
-- `dir out_clean`
-- `notepad out_clean\badge.json`
-- `notepad out_clean\receipts.jsonl`
-
-运行 risky 示例（含 policy-sim）并查看结果：
-
-- `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim`
-- `notepad out_sim\badge.json`
-
----
-
-## 输出说明
-
-输出目录（由 `--out` 指定）至少包含：
-
-- `badge.json`：status / behavior_summary / risk_highlights / stats /（可选）policy_simulation
-- `receipts.jsonl`：hash 链收据（prev_hash → receipt_hash），用于回放与篡改检测
-
----
-
-## 新增能力（v1.1）
-
-1. **扩展事件类型**：`DATABASE_OP / API_CALL / MEMORY_ACCESS`（见 `examples/ext_run.jsonl`）  
-2. **证据缺口显式化**：缺 MUST 字段 / 缺关键 details / `data_complete=false` → 产生 `EVIDENCE_GAP`  
-3. **未知事件类型显式化**：`UNKNOWN_EVENT_TYPE`（不会静默忽略）  
-4. **Advisory policy profiles + 配置**：`--config policy.json` + `--profile advisory|strict_advisory`（见 RFC-002）  
-5. **收据链验链器**：`--verify-receipts out_dir/receipts.jsonl`
-
----
-
-## Policy Simulation（advisory）
-
-运行：
-
-- `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim`
-
-可选配置（示例）：
-
-- `python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim --config policy.json --profile strict_advisory`
-
-配置格式见：`RFC/002-advisory-policy.md`
-
----
-
-## RFC / Contract
-
-- `RFC/001-flight-log.md`：事件 JSONL 合同（MUST 字段 + details 结构 + 扩展事件）
-- `RFC/002-advisory-policy.md`：policy-sim 输出字段与 policy.json 结构
-
----
-
-## Repository Layout (high level)
-
-openclaw-flight-recorder-verified/
-├── RFC/
-│ ├── 001-flight-log.md
-│ └── 002-advisory-policy.md
-├── src/
-│ └── recorder.py
-├── examples/
-│ ├── clean_run.jsonl
-│ ├── risky_run.jsonl
-│ └── ext_run.jsonl
-├── tests/
-│ └── test_examples.py
-└── .github/workflows/
-└── ci.yml
-
-::contentReference[oaicite:0]{index=0}
-
-## Experimental: Extension Recorder
-For additional experimental event types and stricter determinism checks, you can run:
+## Quickstart (Local)
+Requirements: Python 3.10+ (stdlib only)
 
 ```bash
-python src/recorder_ext.py --input examples/risky_run.jsonl --out out_ext --policy-sim
-python src/recorder_ext.py --input examples/ws_token_demo.jsonl --out out_ws_ext
+# Standard mode (observability only)
+python src/recorder.py --input examples/risky_run.jsonl --out out_report --overwrite
+
+# Experimental: policy simulation (advisory only)
+python src/recorder.py --input examples/risky_run.jsonl --out out_sim --overwrite --policy-sim
+
+Reproducibility / Conformance
+
+See VERIFY.md for pass/fail criteria and tests/ for CI-compatible checks.
+
+Experimental: Extension Recorder
+
+If you add an extension recorder (e.g., src/recorder_ext.py), you can run:
+
+python src/recorder_ext.py --input examples/risky_run.jsonl --out out_ext --overwrite --policy-sim
+python src/recorder_ext.py --input examples/ws_token_demo.jsonl --out out_ws_ext --overwrite
+
+Draft spec: RFC/drafts/003-websocket-token-safety-signals.md
+
+Security / Privacy
+
+See SECURITY.md
+
+See PRIVACY.md
+
+See VERIFY.md for anti-impersonation and reproducibility expectations
+
+License
+
+MIT (see LICENSE).
+
+
+---
+
+# 4）SECURITY.md 需要替换吗？
+不需要。你现在的 SECURITY.md 已经没有占位符，也很干净。([github.com](https://github.com/liangfeng-hu/openclaw-flight-recorder/tree/main))  
+如果你非要统一成更短版本，也可以，但不是必须。
+
+---
+
+# 5）你现在“为什么会混进去 MIT License”？
+因为你复制粘贴时把聊天里的内容整段贴进了 VERIFY.md。
+
+**规则**（记住这一条就不会再乱）：  
+- `LICENSE` 文件里只放 MIT License 纯文本  
+- `VERIFY.md` 只放“验收口径/可复现检查”  
+- 任何“聊天说明/操作步骤”不要贴进仓库文件
+
+---
+
+如果你愿意，你把你仓库里 **当前的 VERIFY.md 页面截图**发我一张（只要能看到开头和结尾），我可以直接告诉你：你现在仓库里是否已经成功替换干净（有没有还残留 MIT License 在 VERIFY 末尾）。
+::contentReference[oaicite:0]{index=0}
