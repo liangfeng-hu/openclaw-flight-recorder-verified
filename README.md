@@ -102,3 +102,10 @@ openclaw-flight-recorder-verified/
 └── ci.yml
 
 ::contentReference[oaicite:0]{index=0}
+
+## Experimental: Extension Recorder
+For additional experimental event types and stricter determinism checks, you can run:
+
+```bash
+python src/recorder_ext.py --input examples/risky_run.jsonl --out out_ext --policy-sim
+python src/recorder_ext.py --input examples/ws_token_demo.jsonl --out out_ws_ext
