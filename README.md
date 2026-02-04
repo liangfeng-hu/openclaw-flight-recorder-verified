@@ -8,11 +8,13 @@ Agent Transparency Sidecar — Security Audit & Evidence Recorder (Local-Only)
 **Version:** v0.1.0 (Research Preview)  
 **Spec:** RFC-001 `flight-log/1`
 
-> A local, opt-in **transparency sidecar** that converts agent event streams (JSONL) into:
+> **Zero-intrusion (no business-logic changes), opt-in, local-only, read-only by default.**  
+> **零侵入（无需改业务逻辑/工作流），可选接入（opt-in），默认本地只读。**  
+> Converts agent event streams (JSONL) into:
 > - **badge.json**: human-readable behavior summary + risk highlights  
-> - **receipts.jsonl**: hash-chained, tamper-evident receipts (evidence chain)
-
-This is **not** a blocking firewall. `--policy-sim` is **advisory only**.
+> - **receipts.jsonl**: hash-chained, tamper-evident receipts (evidence chain)  
+>
+> This is **not** a blocking firewall. `--policy-sim` is **advisory only**.
 
 ---
 
@@ -34,7 +36,8 @@ This repo provides a simple, local recorder so you can answer:
 2) **Recorder (stdlib-only Python)**: `src/recorder.py`  
 3) **Examples**: clean vs risky runs: `examples/*.jsonl`  
 4) **Reproducibility checks**: `VERIFY.md` + `tests/`  
-5) (Optional) **Draft RFCs** under `RFC/drafts/` for experimental extensions
+5) (Optional) **Draft RFCs** under `RFC/drafts/` for experimental extensions  
+6) (Optional) **Extension Recorder** (if present): `src/recorder_ext.py` for advisory suggestions (`--suggest`)
 
 ---
 
@@ -73,7 +76,7 @@ SECURITY.md — reporting and scope
 
 PRIVACY.md — local-only & digest-first guidance
 
-VERIFY.md — reproducibility + anti-impersonation notes
+VERIFY.md — reproducibility + verification checks
 
 LICENSE — MIT
 
@@ -87,15 +90,18 @@ Not an enforcement engine
 
 Not an exploit guide
 
+Not a centralized reputation system
+
 This tool is about transparent evidence and safe, local verification.
 
 
 ---
 
-### 你接下来怎么用（不需要懂电脑也能做）
-1) 打开仓库 → 点 `README.md` → 右上角 ✏️ Edit  
-2) **全选删掉** → 粘贴上面整份内容  
-3) 滑到最下面 → 点 **Commit changes**
+使用方法（iPhone 也可以）：
+1) 打开仓库 → 点 `README.md`  
+2) 右上角 ✏️ Edit  
+3) 全选删掉 → 粘贴上面整份内容  
+4) 滑到最下面 → `Commit changes`
 
-如果你愿意，我还可以顺手帮你把 README 里“中英标题”再统一成一种风格（全中文 or 全英文），以及把“提案：RFC-001…”那句移到 `RFC/` 文档里，避免 README 里出现“提案腔”。
+如果你愿意，我下一条可以再帮你把 README 的“中英双语比例”调整成更统一的风格（例如：标题/关键口号双语，其余全英文），这样更符合 OpenClaw 国际维护者阅读习惯。
 ::contentReference[oaicite:0]{index=0}
