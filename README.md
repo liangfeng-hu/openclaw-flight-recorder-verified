@@ -25,6 +25,9 @@ python src/recorder_ext.py --input examples/risky_run.jsonl --out out_adv --over
 Optional: config (policy.json)
 python src/recorder_ext.py --input examples/risky_run.jsonl --out out_adv --overwrite --policy-sim --suggest --config policy.json
 
+Conformance
+python -m unittest discover -s tests -p "test_*.py" -v
+
 Docs
 
 RFC/001-flight-log.md
@@ -42,4 +45,3 @@ VERIFY.md
 License
 
 MIT — see LICENSE
-::contentReference[oaicite:0]{index=0}
