@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 # Advisory-only remediation suggestions (facts -> template).
 # - No auto-fix
-# - No execution
+# - No command execution
 # Output conforms to Draft-004 remediation-advice/1
+#
+# Backward compatibility:
+# - Exports BOTH generate_advice() and generate_suggestions() (alias).
+#
+# Tag compatibility:
+# - Supports common alias tags (e.g., UNDECLARED_EGRESS vs UNDECLARED_NET_IO).
 
-import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -40,8 +45,33 @@ def _evidence_list(items: List[Dict[str, Any]]) -> List[str]:
     return _uniq(ev)
 
 
-def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
+# ----------------------------------------
+# Tag alias map (keeps repo stable)
+# ----------------------------------------
+# Your VERIFY uses UNDECLARED_EGRESS, some extensions use UNDECLARED_NET_IO.
+# Also common short aliases for extension demos:
+TAG_ALIAS = {
+    "UNDECLARED_NET_IO": "UNDECLARED_EGRESS",
+    "SQL_RISK": "SQL_INJECTION_RISK",
+    "API_CREDENTIAL_EXPOSURE": "API_KEY_EXPOSURE",
+    "HIGH_MEMORY_ACCESS": "MEMORY_OVERFLOW_RISK",
+}
+
+
+def _canonical_tag(tag: str) -> str:
+    return TAG_ALIAS.get(tag, tag)
+
+
+# ----------------------------------------
+# Suggestion catalog (advisory templates)
+# ----------------------------------------
+def _template_for_tag(canonical_tag: str) -> Optional[Dict[str, Any]]:
+    """
+    Returns a suggestion template for a single canonical tag.
+    Pure advisory; avoids exploit steps.
+    """
     catalog: Dict[str, Dict[str, Any]] = {
+        # Supply chain / skills
         "UNPINNED_DEP": {
             "priority": "HIGH",
             "title": "Pin dependencies and lock supply chain inputs",
@@ -62,7 +92,9 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Make installs/updates explicit in your runbook (declare intent).",
                 "Run installs only in an isolated environment (VM/container) when possible."
             ],
-            "verify": ["Re-run recorder: UNDECLARED_DEP_INSTALL should disappear or become declared."],
+            "verify": [
+                "Re-run recorder: UNDECLARED_DEP_INSTALL should disappear or become declared."
+            ],
         },
         "REMOTE_SCRIPT": {
             "priority": "CRITICAL",
@@ -72,8 +104,12 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Prefer documented packages with checksums and pinned versions.",
                 "Isolate and inspect the skill source before execution."
             ],
-            "verify": ["Re-run recorder: REMOTE_SCRIPT should disappear."],
+            "verify": [
+                "Re-run recorder: REMOTE_SCRIPT should disappear."
+            ],
         },
+
+        # Side effects
         "UNDECLARED_EXEC": {
             "priority": "CRITICAL",
             "title": "Make process execution explicit (or disable it in risky contexts)",
@@ -81,16 +117,20 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Declare and document any exec behavior; keep it off by default in community contexts.",
                 "Separate high-risk exec from untrusted sources where possible."
             ],
-            "verify": ["Re-run recorder: UNDECLARED_EXEC should disappear."],
+            "verify": [
+                "Re-run recorder: UNDECLARED_EXEC should disappear."
+            ],
         },
-        "UNDECLARED_NET_IO": {
+        "UNDECLARED_EGRESS": {
             "priority": "HIGH",
             "title": "Control outbound network calls (egress) via allowlists",
             "do": [
                 "Declare outbound network usage.",
                 "Use allowlists/proxy policies in production environments."
             ],
-            "verify": ["Re-run recorder: UNDECLARED_NET_IO should disappear or become declared."],
+            "verify": [
+                "Re-run recorder: UNDECLARED_EGRESS should disappear or become declared."
+            ],
         },
         "UNDECLARED_FILE_MUTATION": {
             "priority": "HIGH",
@@ -99,7 +139,9 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Restrict writes to a dedicated workspace directory.",
                 "Avoid touching system paths; treat them as high-risk."
             ],
-            "verify": ["Re-run recorder: UNDECLARED_FILE_MUTATION should disappear."],
+            "verify": [
+                "Re-run recorder: UNDECLARED_FILE_MUTATION should disappear."
+            ],
         },
         "SENSITIVE_PATH": {
             "priority": "CRITICAL",
@@ -108,8 +150,12 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Block writes to system paths (e.g., /etc, system folders).",
                 "Use sandboxing/isolation for untrusted skills."
             ],
-            "verify": ["Re-run recorder: SENSITIVE_PATH should disappear."],
+            "verify": [
+                "Re-run recorder: SENSITIVE_PATH should disappear."
+            ],
         },
+
+        # Data quality
         "EVIDENCE_GAP": {
             "priority": "MEDIUM",
             "title": "Fix evidence gaps (missing exporter fields / parsing issues)",
@@ -118,10 +164,49 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Set data_complete=true only when fields are present.",
                 "Avoid mixing incompatible schemas in one log."
             ],
-            "verify": ["Re-run recorder: EVIDENCE_GAP should be 0."],
+            "verify": [
+                "Re-run recorder: EVIDENCE_GAP should be 0."
+            ],
         },
 
-        # Draft-003 tags
+        # Extension risk tags
+        "SQL_INJECTION_RISK": {
+            "priority": "HIGH",
+            "title": "Mitigate risky database operations (heuristic)",
+            "do": [
+                "Treat unscoped destructive queries as high risk (require review).",
+                "Add parameterized query safeguards where applicable.",
+                "Run DB-affecting skills in isolated environments."
+            ],
+            "verify": [
+                "Re-run recorder: SQL_INJECTION_RISK should disappear or become explicitly declared."
+            ],
+        },
+        "API_KEY_EXPOSURE": {
+            "priority": "CRITICAL",
+            "title": "Prevent credential exposure in API calls",
+            "do": [
+                "Avoid embedding API keys in logs; use digest-only references.",
+                "Use environment secrets managers and short-lived tokens where possible.",
+                "Rotate/revoke leaked credentials immediately."
+            ],
+            "verify": [
+                "Re-run recorder: API_KEY_EXPOSURE should disappear."
+            ],
+        },
+        "MEMORY_OVERFLOW_RISK": {
+            "priority": "HIGH",
+            "title": "Limit high memory access patterns",
+            "do": [
+                "Set conservative memory thresholds for untrusted skills.",
+                "Use isolation and resource budgets for heavy workloads."
+            ],
+            "verify": [
+                "Re-run recorder: MEMORY_OVERFLOW_RISK should disappear."
+            ],
+        },
+
+        # Draft-003 (WS/Gateway/Token boundary) tags
         "UNTRUSTED_GATEWAY_SOURCE": {
             "priority": "CRITICAL",
             "title": "Treat query-param gateway URLs as untrusted; enforce validation/allowlist",
@@ -130,7 +215,9 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Ensure gateway URLs are validated and allowlisted; never auto-connect on untrusted input.",
                 "After patching, ensure validation_result is PASS/FAIL (not SKIP)."
             ],
-            "verify": ["Re-run: UNTRUSTED_GATEWAY_SOURCE should disappear after fix."],
+            "verify": [
+                "Re-run: UNTRUSTED_GATEWAY_SOURCE should disappear after fix."
+            ],
         },
         "AUTO_WS_CONNECT": {
             "priority": "HIGH",
@@ -139,7 +226,9 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Require explicit confirmation before WS connect when source is untrusted.",
                 "Prefer wss and strict origin checks; keep URL as digest-only in logs."
             ],
-            "verify": ["Re-run: AUTO_WS_CONNECT should disappear."],
+            "verify": [
+                "Re-run: AUTO_WS_CONNECT should disappear."
+            ],
         },
         "CRED_CROSS_BOUNDARY": {
             "priority": "CRITICAL",
@@ -148,7 +237,9 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Assume credentials may be exposed; rotate/revoke credentials used in that session.",
                 "Prefer short-lived granular tokens; avoid long-lived classic tokens."
             ],
-            "verify": ["Re-run: credential sends should only occur when explicitly intended."],
+            "verify": [
+                "Re-run: credential sends should only occur when explicitly intended."
+            ],
         },
         "UNDECLARED_CRED_SEND": {
             "priority": "CRITICAL",
@@ -157,33 +248,80 @@ def _suggest_for_tag(tag: str) -> Optional[Dict[str, Any]]:
                 "Treat as incident: revoke/rotate relevant credentials.",
                 "Require explicit declaration and user confirmation for credential forwarding."
             ],
-            "verify": ["Re-run: UNDECLARED_CRED_SEND should disappear."],
+            "verify": [
+                "Re-run: UNDECLARED_CRED_SEND should disappear."
+            ],
+        },
+        "WS_TO_LOCALHOST": {
+            "priority": "CRITICAL",
+            "title": "WebSocket connection to localhost detected (high risk in many contexts)",
+            "do": [
+                "Disable localhost WS connects unless strictly required and explicitly declared.",
+                "Use allowlists and session binding for any local gateway control plane."
+            ],
+            "verify": [
+                "Re-run: WS_TO_LOCALHOST should disappear."
+            ],
+        },
+        "GATEWAY_VALIDATION_SKIPPED": {
+            "priority": "HIGH",
+            "title": "Gateway URL validation was skipped",
+            "do": [
+                "Ensure gateway validation is always executed (no SKIP).",
+                "Prefer allowlist-based validation."
+            ],
+            "verify": [
+                "Re-run: validation_result should be PASS/FAIL, not SKIP."
+            ],
+        },
+        "ALLOWLIST_MISS": {
+            "priority": "HIGH",
+            "title": "Gateway URL not allowlisted",
+            "do": [
+                "Add safe gateways to allowlist; reject everything else.",
+                "Avoid query-param sourced gateways."
+            ],
+            "verify": [
+                "Re-run: ALLOWLIST_MISS should disappear after allowlist fix."
+            ],
         },
     }
 
-    if tag in catalog:
-        out = dict(catalog[tag])
-        out["tag"] = tag
+    if canonical_tag in catalog:
+        out = dict(catalog[canonical_tag])
+        out["tag"] = canonical_tag
         return out
     return None
 
 
+# ----------------------------------------
+# Draft-004 output: remediation-advice/1
+# ----------------------------------------
 def generate_advice(
     badge: Dict[str, Any],
     input_hint: str = "",
     source_tool_name: str = "openclaw-flight-recorder",
+    source_tool_version: str = "",
     policy_profile_id: str = "default",
     policy_profile_digest: str = "",
     receipt_chain_tip: str = "",
 ) -> Dict[str, Any]:
+    """
+    Draft-004 compliant output.
+    """
     risk_highlights = badge.get("risk_highlights", []) or []
     idx = _tag_index(risk_highlights)
 
     suggestions: List[Dict[str, Any]] = []
-    for tag, items in idx.items():
-        s = _suggest_for_tag(tag)
-        if not s:
+    for raw_tag, items in idx.items():
+        canonical = _canonical_tag(raw_tag)
+        tpl = _template_for_tag(canonical)
+        if not tpl:
             continue
+
+        # Output tag should match the observed tag (raw_tag), but use canonical template content
+        s = dict(tpl)
+        s["tag"] = raw_tag
         s["count"] = len(items)
         s["evidence"] = _evidence_list(items)
         suggestions.append(s)
@@ -191,7 +329,7 @@ def generate_advice(
     tags_present = sorted(list(idx.keys()))
     st = badge.get("stats") or {}
 
-    doc = {
+    doc: Dict[str, Any] = {
         "v": "remediation-advice/1",
         "generated_at": _now_iso(),
         "source": {
@@ -200,7 +338,7 @@ def generate_advice(
         },
         "input": {
             "flight_log_path": input_hint,
-            "receipt_chain_tip": receipt_chain_tip
+            "receipt_chain_tip": receipt_chain_tip,
         },
         "summary": {
             "status": badge.get("status"),
@@ -212,32 +350,42 @@ def generate_advice(
         "safety": {
             "auto_fix": False,
             "enforcement": False,
-            "secrets_logged": False
+            "secrets_logged": False,
         },
-        "suggestions": suggestions
+        "suggestions": suggestions,
     }
 
+    if source_tool_version:
+        doc["source"]["tool_version"] = source_tool_version
     if policy_profile_digest:
         doc["source"]["policy_profile_digest"] = policy_profile_digest
 
-    # Optional: summarize policy-sim if present
     ps = badge.get("policy_simulation")
     if isinstance(ps, dict):
         doc["policy_simulation_summary"] = {
             "enabled": bool(ps.get("enabled", True)),
             "would_block": bool(ps.get("would_block", False)),
-            "violation_count": int(ps.get("violation_count", 0))
+            "violation_count": int(ps.get("violation_count", 0)),
         }
 
     return doc
 
 
+# Backward compatible alias (older imports won't break)
+def generate_suggestions(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    return generate_advice(*args, **kwargs)
+
+
 def build_probe_plan_md(advice: Dict[str, Any]) -> str:
+    """
+    Human-friendly plan: fix directions + verification steps.
+    Expects Draft-004 advice dict (but tolerates missing fields).
+    """
     lines: List[str] = []
     lines.append("# Probe Plan (Advisory)")
     lines.append("")
     lines.append(f"- generated_at: {advice.get('generated_at')}")
-    lines.append(f"- status: {advice.get('summary', {}).get('status')}")
+    lines.append(f"- status: {(advice.get('summary') or {}).get('status')}")
     lines.append("")
     lines.append("## Goal")
     lines.append("Reduce high-attention tags and eliminate evidence gaps using manual fixes.")
@@ -250,14 +398,14 @@ def build_probe_plan_md(advice: Dict[str, Any]) -> str:
     lines.append("")
     lines.append("## Suggestions")
     lines.append("")
-    for s in advice.get("suggestions", []):
+    for s in advice.get("suggestions", []) or []:
         lines.append(f"### [{s.get('priority')}] {s.get('title')} (tag={s.get('tag')}, count={s.get('count')})")
-        for d in s.get("do", []):
+        for d in s.get("do", []) or []:
             lines.append(f"- DO: {d}")
-        for v in s.get("verify", []):
+        for v in s.get("verify", []) or []:
             lines.append(f"- VERIFY: {v}")
         ev = s.get("evidence") or []
         if ev:
-            lines.append("- Evidence digests: " + ", ".join([x[:16] + "..." for x in ev]))
+            lines.append("- Evidence digests: " + ", ".join([str(x)[:16] + "..." for x in ev]))
         lines.append("")
     return "\n".join(lines)
