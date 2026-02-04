@@ -46,12 +46,23 @@ python src/recorder.py --input examples/risky_run.jsonl --out out_risky
 # Advisory policy simulation (optional)
 python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim
 
+Outputs:
+
+badge.json (facts + highlights)
+
+receipts.jsonl (hash-chained receipts)
+
 Conformance / Reproducibility
 
 Pass/fail criteria: VERIFY.md
 Run tests:
 
 python -m unittest discover -s tests -p "test_*.py" -v
+
+Advisory configuration (optional)
+
+You may provide --config policy.json to override thresholds/paths/rules.
+Default advisory rules are built-in; policy.json is optional.
 
 Security / Privacy
 
@@ -72,44 +83,26 @@ If the CI badge doesn’t refresh, reload the page or ensure it points to the co
 
 ---
 
-# D)（可选但建议）整文件替换：`VERIFY.md`（确保里面不再混入 LICENSE/聊天说明）
-你现在 README 已经干净了；VERIFY 也建议保持“纯验收口径”。如果你确认 VERIFY 已经很干净，就不用动；如果里面还有杂质，就用这份整替换：
+# 方案 B：把 RFC/002 补回来（也可以，但不推荐）
+如果你坚持保留 RFC-002 的“文件存在且可点开”，那就：
+- 新建 `RFC/002-advisory-policy.md`
+- 内容写清：policy-sim 输出字段 + policy.json 结构
 
-文件名称：《VERIFY.md》（整份替换，可选）
-```markdown
-# VERIFY.md — 可复现验收与一致性检查（SSOT）
+但你之前策略就是“RFC-002 降级为 draft / optional”，所以现在更合适的是 **方案 A**（删引用/不强依赖）。
 
-本文件定义本项目的可复现验收口径：JSONL → badge.json（事实摘要）+ receipts.jsonl（可验证收据链）。
-（注：--policy-sim 为 advisory 建议性信号，不是阻断防火墙。）
+---
 
-## 0. 环境要求
-- Python 3.10+
-- 零依赖（标准库即可）
+# 你问“是否需要修正？和上面的补全一并修正最终稿”
+✅ **需要修正**，而且建议你用 **方案 A-2（整份替换 README）**一次性封板，最省心、最不容易贴错。
 
-## 1. 本地快速验收（主线 recorder.py）
+---
 
-### 1.1 Clean（必须干净）
-python src/recorder.py --input examples/clean_run.jsonl --out out_clean
+## 你现在要做的操作（1 分钟）
+1) 打开仓库 → 点 `README.md`  
+2) ✏️ Edit  
+3) 全选删除  
+4) 粘贴我给你的“整份最终 README”  
+5) Commit changes  
 
-必须满足：
-- status == OBSERVED
-- highlight_count == 0
-- evidence_gaps == 0
-- risk_highlights 为空
-
-### 1.2 Risky（必须出现核心风险信号）
-python src/recorder.py --input examples/risky_run.jsonl --out out_risky --policy-sim
-
-必须满足：
-- status 为 ATTENTION（本示例要求 evidence_gaps == 0）
-- policy_simulation.would_block == true
-- highlight_count >= 7
-- policy_simulation.violation_count >= 7
-
-## 2. 一致性测试（CI 同口径）
-python -m unittest discover -s tests -p "test_*.py" -v
-
-## 3. receipts.jsonl 收据链要求
-- 第一条 prev_hash 是 64 个 0
-- 从第二条开始：每条 prev_hash 等于上一条 receipt_hash
-- event_hash / prev_hash / receipt_hash 都是 64 位十六进制字符串
+做完你就达到你说的 **100% 无残留**，可以直接发给对方。
+::contentReference[oaicite:0]{index=0}
