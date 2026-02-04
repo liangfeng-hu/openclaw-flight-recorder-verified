@@ -1,4 +1,5 @@
-# OpenClaw Flight Recorder (Research Preview)
+# Agent 透明外挂｜安全检测评估记录器（Research Preview）
+Agent Transparency Sidecar — Security Audit & Evidence Recorder (Local-Only)
 
 [![CI](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/liangfeng-hu/openclaw-flight-recorder-verified/actions/workflows/ci.yml?branch=main)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
@@ -7,71 +8,94 @@
 **Version:** v0.1.0 (Research Preview)  
 **Spec:** RFC-001 `flight-log/1`
 
-The "Black Box" for AI Agents. A local, opt-in observability tool that digests agent event streams into human-readable Activity Summaries and Verifiable Receipts.
+> A local, opt-in **transparency sidecar** that converts agent event streams (JSONL) into:
+> - **badge.json**: human-readable behavior summary + risk highlights  
+> - **receipts.jsonl**: hash-chained, tamper-evident receipts (evidence chain)
+
+This is **not** a blocking firewall. `--policy-sim` is **advisory only**.
+
+---
 
 ## What problem this solves
-Agents often behave like black boxes. After a skill runs, users and developers need to know:
+Agents can behave like black boxes. After a skill/agent run, users and developers need to know:
+
 - What files were touched (read/write/delete)?
 - What network hosts were contacted?
 - Were any processes executed?
 - Were any dependencies installed during runtime?
 
-This project provides a simple, local Flight Recorder so you can answer: "What did the agent actually do?"
+This repo provides a simple, local recorder so you can answer:  
+**“What did the agent actually do?”** — with verifiable evidence.
+
+---
 
 ## What’s in this repo
-1) RFC-001 Flight Log (JSONL): `RFC/001-flight-log.md`  
-2) Reference recorder implementation (stdlib-only Python): `src/recorder.py`  
-3) Examples: clean vs risky runs: `examples/*.jsonl`  
-4) Reproducibility checks: `VERIFY.md` + `tests/`
+1) **RFC-001 Flight Log (JSONL)**: `RFC/001-flight-log.md`  
+2) **Recorder (stdlib-only Python)**: `src/recorder.py`  
+3) **Examples**: clean vs risky runs: `examples/*.jsonl`  
+4) **Reproducibility checks**: `VERIFY.md` + `tests/`  
+5) (Optional) **Draft RFCs** under `RFC/drafts/` for experimental extensions
+
+---
 
 ## Quickstart (Local)
 Requirements: Python 3.10+ (stdlib only)
 
 ```bash
 # Standard mode (observability only)
-python src/recorder.py --input examples/risky_run.jsonl --out out_report
+python src/recorder.py --input examples/clean_run.jsonl --out out_clean
+python src/recorder.py --input examples/risky_run.jsonl --out out_risky
 
-# Experimental: policy simulation (advisory only)
+# Advisory policy simulation (optional)
 python src/recorder.py --input examples/risky_run.jsonl --out out_sim --policy-sim
+
+Outputs (per run):
+
+badge.json (facts + highlights)
+
+receipts.jsonl (hash-chained receipts)
 
 Reproducibility / Conformance
 
-See VERIFY.md for pass/fail criteria and tests/ for CI-compatible checks.
+See:
 
-Security / Privacy
+VERIFY.md for pass/fail criteria and receipt-chain rules
 
-SECURITY.md
+tests/ for CI-compatible checks
 
-PRIVACY.md
+Run tests locally:
 
-VERIFY.md (reproducibility + anti-impersonation notes)
+python -m unittest discover -s tests -p "test_*.py" -v
 
-License
+Security / Privacy / Verification
 
-MIT (see LICENSE).
+SECURITY.md — reporting and scope
 
+PRIVACY.md — local-only & digest-first guidance
 
-### 如果你的 CI 徽章显示不出来怎么办？
-很简单：  
-1）打开仓库 `.github/workflows/` 文件夹  
-2）看里面 workflow 文件名（例如 `python-tests.yml`）  
-3）把 README 里这段的 `ci.yml` 改成你的真实文件名即可：
+VERIFY.md — reproducibility + anti-impersonation notes
 
-.../actions/workflows/ci.yml/badge.svg
-.../actions/workflows/ci.yml
+LICENSE — MIT
 
+If the CI badge doesn’t refresh, reload the page or ensure it points to the correct workflow file under .github/workflows/.
 
----
+Non-goals
 
-# 4）你现在要做的最短动作清单
-✅ 必做（3 个文件全替换一次就收尾）  
-1) LICENSE（去掉 `<YOUR_NAME>`）  
-2) VERIFY.md（删除末尾混入的 License + 聊天说明）  
-3) README.md（补回徽章 + 版本信息）
+Not a malware scanner
 
-SECURITY.md 你现在这份已经没占位符，不用动。
+Not an enforcement engine
+
+Not an exploit guide
+
+This tool is about transparent evidence and safe, local verification.
+
 
 ---
 
-如果你愿意，我还能顺手帮你把 **版本号统一**（例如把 v0.1.0 放到一个 `VERSION` 文件里，未来发 Release/Tag 都能自动引用），但这不是必须项。
+### 你接下来怎么用（不需要懂电脑也能做）
+1) 打开仓库 → 点 `README.md` → 右上角 ✏️ Edit  
+2) **全选删掉** → 粘贴上面整份内容  
+3) 滑到最下面 → 点 **Commit changes**
+
+如果你愿意，我还可以顺手帮你把 README 里“中英标题”再统一成一种风格（全中文 or 全英文），以及把“提案：RFC-001…”那句移到 `RFC/` 文档里，避免 README 里出现“提案腔”。
 ::contentReference[oaicite:0]{index=0}
