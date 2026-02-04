@@ -5,10 +5,9 @@
 # - Optional policy simulation
 # - Advisory suggestions (facts -> template), no auto-fix
 #
-# CI-stability patch:
+# CI-stability:
 # - Robust import: generate_advice <-> generate_suggestions both supported
 # - Robust call wrapper: tolerates different function signatures
-# - Unifies outbound tag to UNDECLARED_EGRESS (matches main recorder style)
 
 import argparse
 import json
@@ -29,14 +28,15 @@ try:
 except Exception:
     from remediation_advisor import generate_suggestions as _GEN_ADVICE  # older name
 
-from remediation_advisor import build_probe_plan_md as _BUILD_PLAN  # stable name
+# probe plan function name should be stable, but keep it as variable anyway
+from remediation_advisor import build_probe_plan_md as _BUILD_PLAN  # noqa
 
 
 def _call_generate_advice(badge: Dict[str, Any], input_hint: str = "", receipt_chain_tip: str = "") -> Dict[str, Any]:
     """
     Compatibility wrapper:
     - supports generate_advice(badge=..., input_hint=..., receipt_chain_tip=...)
-    - and generate_suggestions(badge, input_hint)
+    - supports generate_suggestions(badge, input_hint)
     """
     # Try keyword-rich call first
     try:
@@ -144,6 +144,7 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         pkg = safe_str(get_field(event, "package", ""))
         ver = safe_str(get_field(event, "version", ""))
         dep_name = safe_str(get_field(event, "dep_name", ""))
+
         if ver and UNPINNED_VER_PAT.search(ver):
             risks.append({"tag": "UNPINNED_DEP", "seq": seq, "evidence": ev_hash})
         if dep_name and "@latest" in dep_name:
@@ -162,8 +163,10 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         path = safe_str(get_field(event, "path", ""))
         op = safe_str(get_field(event, "op", "")).lower()
         mode = safe_str(get_field(event, "mode", "")).lower()
+
         if path and any(path.startswith(pfx) for pfx in sensitive_paths):
             risks.append({"tag": "SENSITIVE_PATH", "seq": seq, "evidence": ev_hash})
+
         is_mutation = op in ("write", "delete") or mode in ("w", "a", "x")
         if is_mutation and not declared:
             risks.append({"tag": "UNDECLARED_FILE_MUTATION", "seq": seq, "evidence": ev_hash})
@@ -171,8 +174,8 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
     elif et == "NET_IO":
         direction = safe_str(get_field(event, "direction", "")).upper()
         if direction == "OUT" and not declared:
-            # unify tag name to match main recorder expectations
-            risks.append({"tag": "UNDECLARED_EGRESS", "seq": seq, "evidence": ev_hash})
+            # keep your existing tag name (don’t break tests)
+            risks.append({"tag": "UNDECLARED_NET_IO", "seq": seq, "evidence": ev_hash})
 
     elif et == "DATABASE_OP":
         query = safe_str(get_field(event, "query", "")).lower()
@@ -183,9 +186,11 @@ def detect_risks(event: Dict[str, Any], declared_intents: Optional[set], sensiti
         headers = get_field(event, "headers", {}) or {}
         if not isinstance(headers, dict):
             headers = {}
+
         def nonempty(v: Any) -> bool:
             s = str(v).strip() if v is not None else ""
             return bool(s) and s.upper() not in ("REDACTED", "MASKED", "<REDACTED>", "***")
+
         found = False
         if "api_key" in headers and nonempty(headers.get("api_key")):
             found = True
@@ -246,7 +251,7 @@ def simulate_policy(risks: List[Dict[str, Any]], policy_rules: Dict[str, bool]) 
     def block(tag: str) -> bool:
         if tag in ("UNPINNED_DEP", "UNDECLARED_DEP_INSTALL"):
             return policy_rules.get("block_unpinned_deps", True)
-        if tag in ("REMOTE_SCRIPT", "UNDECLARED_EXEC", "UNDECLARED_FILE_MUTATION", "UNDECLARED_EGRESS", "UNDECLARED_CRED_SEND"):
+        if tag in ("REMOTE_SCRIPT", "UNDECLARED_EXEC", "UNDECLARED_FILE_MUTATION", "UNDECLARED_NET_IO", "UNDECLARED_CRED_SEND"):
             return policy_rules.get("block_undeclared_actions", True)
         if tag in ("SENSITIVE_PATH", "WS_TO_LOCALHOST"):
             return policy_rules.get("block_sensitive_access", True)
